@@ -1,0 +1,506 @@
+/**
+ * 내 캘린더 — 비공개 구글 시트 백엔드 (Google Apps Script) v1.0.0
+ * =============================================================
+ * 구글 캘린더 스타일 개인 캘린더의 저장소입니다.
+ *  · 일정은 이 스프레드시트(비공개)에만 저장됩니다.
+ *  · 「📤 구글 캘린더로 보내기」를 누른 일정만 내 구글 캘린더의 **기본 캘린더**로 복사됩니다.
+ *
+ * 설치 (한 번만, 약 3분)
+ *  1. 새 스프레드시트를 만들고 이름을 「[비공개] 내 캘린더」로 정합니다.
+ *  2. 메뉴: 확장 프로그램 → Apps Script.
+ *  3. 기본 Code.gs 내용을 지우고 이 파일 내용을 그대로 붙여 넣고 저장(Ctrl+S).
+ *  4. (권장) 프로젝트 설정 → 시간대가 Asia/Seoul 인지 확인합니다.
+ *     · 스프레드시트 설정의 시간대를 그대로 따르므로, 시트를 한국 시간으로 만들어 두면 됩니다.
+ *  5. 배포 → 새 배포 → 유형(⚙) = 웹 앱
+ *       · 설명: 내 캘린더 백엔드
+ *       · 다음 사용자로 실행: 나
+ *       · 액세스 권한: 모든 사용자   ← 캘린더 페이지에서 부르려면 반드시 이 값
+ *     → 배포 → 액세스 승인(내 구글 계정) → 웹 앱 URL(.../exec) 복사
+ *  6. 캘린더 페이지 ⚙ 설정에 그 URL을 붙여 넣고 [연결]을 누릅니다.
+ *     · 처음 연결할 때 구글 계정 권한(스프레드시트 + 캘린더)을 한 번 승인합니다.
+ *     · "Google hasn't verified this app" 경고가 나오면 고급 → (안전하지 않음)으로 이동 → 허용.
+ *
+ * 코드를 고친 뒤에는 반드시 배포 → 배포 관리 → 수정(연필) → 버전: 새 버전 → 배포.
+ *
+ * 시트 구성 (처음 호출할 때 자동으로 만듭니다)
+ *  · 일정   : ID | 제목 | 시작 | 종료 | 종일 | 반복 | 캘린더ID | 장소 | 메모 | 구글전송ID | 수정시각
+ *             시작/종료 형식  종일=Y → `2026-11-25` / 시간 일정 → `2026-11-25T15:00`
+ *  · 캘린더 : ID | 이름 | 색상 | 표시여부 | 순서
+ *  · 설정   : 항목 | 값 | 비고
+ *
+ * API (브라우저는 JSONP GET, 또는 text/plain POST 로 부릅니다)
+ *  ?action=ping                      연결 확인 → {ok, version, now, sheet, timezone}
+ *  ?action=load                      전체 읽기 → {ok, events:[...], calendars:[...], settings:{...}}
+ *  ?action=saveEvent  {event}        일정 한 건 저장(없으면 추가) — 구글전송ID는 시트 값을 지키지 않습니다(아래 참고)
+ *  ?action=deleteEvent {id}          일정 한 건 삭제
+ *  ?action=saveCalendars {calendars} 캘린더 목록 전체 저장(이름·색상·표시여부·순서)
+ *  ?action=saveAll    {events, calendars}
+ *                                    이 브라우저의 일정·캘린더를 시트에 통째로 올립니다(최초 이전용).
+ *                                    events 가 비어 있고 시트에 일정이 있으면 거부합니다(clear:true 로만 허용).
+ *  ?action=exportToGoogleCalendar {event} | {id}
+ *                                    내 구글 캘린더 기본 캘린더에 일정을 만들고 eventId를 시트에 기록
+ *  ?callback=함수이름                 JSONP 로 감싸서 응답
+ *
+ * 안전장치
+ *  · 쓰기는 LockService 로 한 번에 하나씩 처리합니다.
+ *  · saveEvent 는 시트에 이미 구글전송ID가 있으면 덮어쓰지 않습니다(중복 전송 방지).
+ *  · exportToGoogleCalendar 는 이미 전송된 일정이면 새로 만들지 않고 기존 eventId 를 돌려줍니다.
+ *
+ * 개인정보: 이 스크립트는 사용자 본인의 스프레드시트와 본인의 캘린더만 다룹니다.
+ *           웹 앱 주소(.../exec)를 아는 사람은 이 시트의 일정을 읽고 쓸 수 있으니 주소는 비공개로 두세요.
+ *           (필요하면 배포 접근 권한을 "나"로 바꿔 본인만 쓰는 방식도 가능하지만,
+ *            그러면 브라우저에서 JSONP 로 부를 수 없습니다.)
+ */
+
+/** 스프레드시트 ID. 시트에 붙인(컨테이너 바인딩) 스크립트라면 비워 두세요. */
+var SHEET_ID = '';
+
+var BACKEND_VERSION = '1.0.0';
+
+var TABS = { events: '일정', calendars: '캘린더', settings: '설정' };
+
+var HEADERS = {
+  events: ['ID', '제목', '시작', '종료', '종일', '반복', '캘린더ID', '장소', '메모', '구글전송ID', '수정시각'],
+  calendars: ['ID', '이름', '색상', '표시여부', '순서'],
+  settings: ['항목', '값', '비고']
+};
+
+var DEFAULT_CALENDARS = [
+  { id: 'personal', name: '개인', color: '#039be5', visible: true, order: 0 },
+  { id: 'family', name: '가족', color: '#33b679', visible: true, order: 1 },
+  { id: 'invest', name: '투자', color: '#8e24aa', visible: true, order: 2 },
+  { id: 'memo', name: '메모', color: '#f4511e', visible: true, order: 3 }
+];
+
+var MAX_EVENTS = 3000;
+
+/* ------------------------------------------------------------------ 라우팅 */
+
+function doGet(e) {
+  var p = (e && e.parameter) || {};
+  var cb = p.callback || '';
+  var action = p.action || 'ping';
+  var req = {};
+  if (p.d) {
+    try {
+      req = JSON.parse(p.d);
+    } catch (err) {
+      return out_({ ok: false, error: '요청 내용(d)을 읽지 못했습니다.' }, cb);
+    }
+  }
+  Object.keys(p).forEach(function (k) {
+    if (k === 'd' || k === 'callback' || k === 'action') return;
+    if (!(k in req)) req[k] = p[k];
+  });
+  return handle_(action, req, cb);
+}
+
+function doPost(e) {
+  var body = {};
+  try {
+    if (e && e.postData && e.postData.contents) body = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return out_({ ok: false, error: 'POST 본문을 읽지 못했습니다.' }, '');
+  }
+  return handle_(body.action || 'ping', body, body.callback || '');
+}
+
+function handle_(action, req, cb) {
+  var lock = null;
+  try {
+    if (action !== 'ping' && action !== 'load' && action !== 'status') {
+      lock = LockService.getScriptLock();
+      lock.waitLock(20000);
+    }
+    setup_();
+    switch (action) {
+      case 'ping': return out_(ping_(), cb);
+      case 'status': return out_(ping_(), cb);
+      case 'load': return out_(load_(), cb);
+      case 'saveEvent': return out_(saveEvent_(req), cb);
+      case 'deleteEvent': return out_(deleteEvent_(req), cb);
+      case 'saveCalendars': return out_(saveCalendars_(req), cb);
+      case 'saveAll': return out_(saveAll_(req), cb);
+      case 'exportToGoogleCalendar': return out_(exportToGoogle_(req), cb);
+      default: return out_({ ok: false, error: '알 수 없는 요청: ' + action }, cb);
+    }
+  } catch (err) {
+    return out_({ ok: false, error: String((err && err.message) || err) }, cb);
+  } finally {
+    if (lock) { try { lock.releaseLock(); } catch (e2) {} }
+  }
+}
+
+/** callback이 있으면 JSONP(스크립트)로, 없으면 JSON으로 응답합니다. */
+function out_(obj, cb) {
+  var body = JSON.stringify(obj);
+  if (cb && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(cb)) {
+    return ContentService
+      .createTextOutput(cb + '(' + body + ');')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService
+    .createTextOutput(body)
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ------------------------------------------------------------------ 시트 준비 */
+
+function ss_() {
+  if (SHEET_ID) return SpreadsheetApp.openById(SHEET_ID);
+  var active = SpreadsheetApp.getActiveSpreadsheet();
+  if (!active) throw new Error('스프레드시트를 찾지 못했습니다. SHEET_ID를 채워 주세요.');
+  return active;
+}
+
+function sheet_(name, headers) {
+  var ss = ss_();
+  var sh = ss.getSheetByName(name);
+  if (!sh) sh = ss.insertSheet(name);
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f1f3f4');
+    sh.setFrozenRows(1);
+  } else {
+    var first = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+    var missing = false;
+    for (var i = 0; i < headers.length; i++) if (String(first[i] || '') === '') missing = true;
+    if (missing) sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+  }
+  return sh;
+}
+
+function setup_() {
+  sheet_(TABS.events, HEADERS.events);
+  var csh = sheet_(TABS.calendars, HEADERS.calendars);
+  if (csh.getLastRow() < 2) writeCalendars_(csh, DEFAULT_CALENDARS);
+  var ssh = sheet_(TABS.settings, HEADERS.settings);
+  if (ssh.getLastRow() < 2) {
+    ssh.getRange(2, 1, 3, 2).setValues([
+      ['앱이름', '내 캘린더'],
+      ['백엔드버전', BACKEND_VERSION],
+      ['시간대', Session.getScriptTimeZone()]
+    ]);
+  }
+}
+
+/** 편집기에서 직접 실행해 시트를 준비할 때 사용합니다. */
+function setup() {
+  setup_();
+  return ping_();
+}
+
+function ping_() {
+  var ss = ss_();
+  return {
+    ok: true,
+    version: BACKEND_VERSION,
+    now: new Date().toISOString(),
+    sheet: ss.getName(),
+    timezone: ss.getSpreadsheetTimeZone() || Session.getScriptTimeZone(),
+    defaultCalendar: (function () {
+      try { return CalendarApp.getDefaultCalendar().getName(); } catch (e) { return ''; }
+    })()
+  };
+}
+
+/* ------------------------------------------------------------------ 읽기 */
+
+function load_() {
+  var ss = ss_();
+  var out = {
+    ok: true,
+    version: BACKEND_VERSION,
+    events: readEvents_(ss),
+    calendars: readCalendars_(ss),
+    settings: readSettings_(ss)
+  };
+  if (!out.calendars.length) out.calendars = DEFAULT_CALENDARS;
+  return out;
+}
+
+function readEvents_(ss) {
+  var sh = ss.getSheetByName(TABS.events);
+  var out = [];
+  if (!sh || sh.getLastRow() < 2) return out;
+  var last = sh.getLastRow();
+  var rows = sh.getRange(2, 1, last - 1, HEADERS.events.length).getValues();
+  rows.forEach(function (r) {
+    var id = String(r[0] || '').trim();
+    if (!id) return;
+    out.push({
+      id: id,
+      title: String(r[1] || ''),
+      start: toText_(r[2]),
+      end: toText_(r[3]),
+      allDay: String(r[4] || '').toUpperCase() === 'Y',
+      repeat: String(r[5] || 'none') || 'none',
+      calId: String(r[6] || ''),
+      location: String(r[7] || ''),
+      memo: String(r[8] || ''),
+      googleId: String(r[9] || ''),
+      updatedAt: toText_(r[10])
+    });
+  });
+  return out;
+}
+
+function readCalendars_(ss) {
+  var sh = ss.getSheetByName(TABS.calendars);
+  var out = [];
+  if (!sh || sh.getLastRow() < 2) return out;
+  var rows = sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.calendars.length).getValues();
+  rows.forEach(function (r, i) {
+    var id = String(r[0] || '').trim();
+    if (!id) return;
+    out.push({
+      id: id,
+      name: String(r[1] || '캘린더'),
+      color: String(r[2] || '#039be5'),
+      visible: String(r[3] || 'Y').toUpperCase() !== 'N',
+      order: Number(r[4] || i)
+    });
+  });
+  out.sort(function (a, b) { return a.order - b.order; });
+  return out;
+}
+
+function readSettings_(ss) {
+  var sh = ss.getSheetByName(TABS.settings);
+  var out = {};
+  if (!sh || sh.getLastRow() < 2) return out;
+  var rows = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+  rows.forEach(function (r) {
+    var k = String(r[0] || '').trim();
+    if (k) out[k] = String(r[1] == null ? '' : r[1]);
+  });
+  return out;
+}
+
+/* ------------------------------------------------------------------ 일정 저장/삭제 */
+
+function saveEvent_(req) {
+  var ev = req.event || req;
+  if (!ev || !ev.id) return { ok: false, error: '일정 ID가 없습니다.' };
+  var sh = sheet_(TABS.events, HEADERS.events);
+  var row = findRow_(sh, ev.id);
+
+  var keepGoogleId = '';
+  if (row > 0) keepGoogleId = String(sh.getRange(row, 10).getValue() || '');
+  var googleId = String(ev.googleId || keepGoogleId || '');
+
+  var values = [[
+    String(ev.id),
+    String(ev.title || ''),
+    String(ev.start || ''),
+    String(ev.end || ev.start || ''),
+    ev.allDay ? 'Y' : 'N',
+    String(ev.repeat || 'none'),
+    String(ev.calId || ''),
+    String(ev.location || ''),
+    String(ev.memo || ''),
+    googleId,
+    String(ev.updatedAt || new Date().toISOString())
+  ]];
+  if (row > 0) {
+    sh.getRange(row, 1, 1, values[0].length).setValues(values);
+  } else {
+    if (sh.getLastRow() >= MAX_EVENTS + 1) return { ok: false, error: '일정이 너무 많습니다(최대 ' + MAX_EVENTS + '개).' };
+    sh.getRange(sh.getLastRow() + 1, 1, 1, values[0].length).setValues(values);
+  }
+  return { ok: true, id: String(ev.id), googleId: googleId };
+}
+
+function deleteEvent_(req) {
+  var id = String(req.id || (req.event && req.event.id) || '');
+  if (!id) return { ok: false, error: '삭제할 일정 ID가 없습니다.' };
+  var sh = sheet_(TABS.events, HEADERS.events);
+  var row = findRow_(sh, id);
+  if (row > 0) sh.deleteRow(row);
+  return { ok: true, id: id, deleted: row > 0 };
+}
+
+function saveCalendars_(req) {
+  var list = req.calendars;
+  if (!Array.isArray(list)) return { ok: false, error: '캘린더 목록이 없습니다.' };
+  if (!list.length) return { ok: false, error: '캘린더가 하나도 없어 저장하지 않았습니다.' };
+  var sh = sheet_(TABS.calendars, HEADERS.calendars);
+  writeCalendars_(sh, list);
+  return { ok: true, count: list.length };
+}
+
+function writeCalendars_(sh, list) {
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.calendars.length).clearContent();
+  var rows = (list || []).slice(0, 60).map(function (c, i) {
+    return [
+      String(c.id || ('c' + i)),
+      String(c.name || '캘린더'),
+      String(c.color || '#039be5'),
+      c.visible === false ? 'N' : 'Y',
+      Number(c.order == null ? i : c.order)
+    ];
+  });
+  if (rows.length) sh.getRange(2, 1, rows.length, HEADERS.calendars.length).setValues(rows);
+}
+
+/**
+ * 이 브라우저의 일정·캘린더를 시트에 통째로 올립니다(최초 이전·복구용).
+ * 일정이 비어 있는 요청으로 기존 데이터를 지우지 않습니다(clear:true 일 때만 허용).
+ */
+function saveAll_(req) {
+  var events = req.events;
+  var calendars = req.calendars;
+  if (!Array.isArray(events)) return { ok: false, error: '일정 목록이 없습니다.' };
+  if (events.length > MAX_EVENTS) return { ok: false, error: '한 번에 올릴 수 있는 일정은 ' + MAX_EVENTS + '개까지입니다.' };
+
+  var sh = sheet_(TABS.events, HEADERS.events);
+  var current = Math.max(0, sh.getLastRow() - 1);
+  if (!events.length && current > 0 && req.clear !== true) {
+    return { ok: false, error: '올릴 일정이 없어 기존 ' + current + '개를 지우지 않았습니다. 정말 비우려면 clear:true 로 보내세요.' };
+  }
+
+  var rows = events.map(function (ev) {
+    return [
+      String(ev.id || ''),
+      String(ev.title || ''),
+      String(ev.start || ''),
+      String(ev.end || ev.start || ''),
+      ev.allDay ? 'Y' : 'N',
+      String(ev.repeat || 'none'),
+      String(ev.calId || ''),
+      String(ev.location || ''),
+      String(ev.memo || ''),
+      String(ev.googleId || ''),
+      String(ev.updatedAt || new Date().toISOString())
+    ];
+  }).filter(function (r) { return !!r[0]; });
+
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.events.length).clearContent();
+  if (rows.length) sh.getRange(2, 1, rows.length, HEADERS.events.length).setValues(rows);
+
+  if (Array.isArray(calendars) && calendars.length) {
+    writeCalendars_(sheet_(TABS.calendars, HEADERS.calendars), calendars);
+  }
+  return { ok: true, events: rows.length };
+}
+
+function findRow_(sh, id) {
+  if (!sh || sh.getLastRow() < 2) return 0;
+  var ids = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) return i + 2;
+  }
+  return 0;
+}
+
+/* ------------------------------------------------------------------ 구글 캘린더로 보내기 */
+
+/**
+ * 일정 한 건을 내 구글 캘린더의 기본 캘린더에 만듭니다.
+ * 이미 보낸 일정(시트에 구글전송ID가 있음)이면 새로 만들지 않고 기존 ID를 돌려줍니다.
+ *
+ * 반복 일정은 CalendarApp이 반복 규칙을 만들지 못하므로 **첫 회차 하루만** 복사하고,
+ * 설명에 반복이라는 사실을 적어 둡니다. (알림이 필요한 회차만 보내는 용도)
+ */
+function exportToGoogle_(req) {
+  var ev = req.event || {};
+  var id = String(ev.id || req.id || '');
+  if (!id) return { ok: false, error: '보낼 일정 ID가 없습니다.' };
+
+  var sh = sheet_(TABS.events, HEADERS.events);
+  var row = findRow_(sh, id);
+
+  // 시트에 기록된 값이 우선입니다(클라이언트가 오래된 사본을 들고 있어도 중복 전송 방지).
+  if (row > 0) {
+    var recorded = String(sh.getRange(row, 10).getValue() || '');
+    if (recorded) return { ok: true, already: true, googleId: recorded };
+  }
+  if (ev.googleId) return { ok: true, already: true, googleId: String(ev.googleId) };
+
+  var title = String(ev.title || '(제목 없음)');
+  var repeat = String(ev.repeat || 'none');
+  var desc = String(ev.memo || '');
+  if (repeat !== 'none') {
+    desc = (desc ? desc + '\n\n' : '') +
+      '🔁 원본은 ' + repeatLabel_(repeat) + ' 반복 일정입니다. 이 복사본은 첫 회차만 들어갔습니다.';
+  }
+  var options = { description: desc, location: String(ev.location || '') };
+
+  var cal = CalendarApp.getDefaultCalendar();
+  if (!cal) return { ok: false, error: '기본 캘린더를 찾지 못했습니다.' };
+
+  var created;
+  if (ev.allDay) {
+    var s = parseDate_(ev.start);
+    var e = parseDate_(ev.end || ev.start);
+    if (e.getTime() < s.getTime()) e = s;
+    if (s.getTime() === e.getTime()) {
+      created = cal.createAllDayEvent(title, s, options);
+    } else {
+      // CalendarApp 의 endDate 는 배타적입니다 → 하루 더합니다.
+      created = cal.createAllDayEvent(title, s, addDays_(e, 1), options);
+    }
+  } else {
+    var st = parseDateTime_(ev.start);
+    var en = parseDateTime_(ev.end || ev.start);
+    if (en.getTime() <= st.getTime()) en = new Date(st.getTime() + 60 * 60 * 1000);
+    created = cal.createEvent(title, st, en, options);
+  }
+
+  var gid = created.getId();
+
+  // 시트에도 기록해 두 번째 전송을 막습니다.
+  if (row > 0) {
+    sh.getRange(row, 10).setValue(gid);
+    if (!String(ev.updatedAt || '')) sh.getRange(row, 11).setValue(new Date().toISOString());
+  }
+  return {
+    ok: true,
+    googleId: gid,
+    title: title,
+    start: String(ev.start || ''),
+    end: String(ev.end || ''),
+    allDay: !!ev.allDay,
+    calendar: (function () { try { return cal.getName(); } catch (e) { return ''; } })(),
+    repeated: repeat !== 'none'
+  };
+}
+
+function repeatLabel_(r) {
+  if (r === 'weekly') return '매주';
+  if (r === 'monthly') return '매월';
+  if (r === 'yearly') return '매년';
+  return r;
+}
+
+/* ------------------------------------------------------------------ 날짜 도우미 */
+
+function parseDate_(s) {
+  var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) throw new Error('날짜 형식이 올바르지 않습니다: ' + s);
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
+}
+
+function parseDateTime_(s) {
+  var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+  if (!m) throw new Error('날짜·시간 형식이 올바르지 않습니다: ' + s);
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] || 0), Number(m[5] || 0), 0, 0);
+}
+
+function addDays_(d, n) {
+  var x = new Date(d.getTime());
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+/** 셀 값을 'YYYY-MM-DD' 또는 'YYYY-MM-DDTHH:mm' 문자열로 돌려줍니다. */
+function toText_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    var tz = Session.getScriptTimeZone() || 'Asia/Seoul';
+    var d = Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+    var hm = Utilities.formatDate(v, tz, 'HH:mm');
+    if (hm === '00:00') return d;
+    return d + 'T' + hm;
+  }
+  return String(v).trim();
+}

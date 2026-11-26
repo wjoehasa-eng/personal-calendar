@@ -197,15 +197,62 @@ with sync_playwright() as p:
     step("drag_month", drag_month)
 
     def week_view():
-        page.click("#viewBtn")
-        page.wait_for_timeout(150)
-        page.click('#viewMenu [data-view="week"]')
+        page.click('#viewTabs [data-viewtab="week"]')
         page.wait_for_timeout(600)
         report["week_tevs"] = page.locator("#tvInner .tev").count()
         report["nowline"] = page.locator(".nowline").count()
         assert report["week_tevs"] > 0
         page.screenshot(path=str(OUT / "03-week.png"))
     step("week_view", week_view)
+
+    def date_number_day():
+        # 주간 화면 날짜 머리 → 그 날 일간 보기
+        page.click('#viewTabs [data-viewtab="week"]')
+        page.wait_for_timeout(500)
+        head = page.locator("#tvHead .tv-hcell").nth(3)
+        target = head.get_attribute("data-dayview")
+        head.click()
+        page.wait_for_timeout(500)
+        assert page.locator("#viewTime").is_visible(), "week date head did not open day view"
+        assert "on" in (page.locator('#viewTabs [data-viewtab="day"]').get_attribute("class") or ""), "day tab not active"
+        report["date_head_day"] = [target, page.inner_text("#htitle")]
+        assert f"{int(target.split('-')[2])}일" in page.inner_text("#htitle"), page.inner_text("#htitle")
+        # 일간 화면 날짜 머리 → 주간 보기
+        page.click("#tvHead .tv-hcell")
+        page.wait_for_timeout(500)
+        assert "on" in (page.locator('#viewTabs [data-viewtab="week"]').get_attribute("class") or ""), "day head did not open week view"
+        # 월간 날짜 숫자 → 그 날 일간 보기 (빠른 등록 아님)
+        page.click('#viewTabs [data-viewtab="month"]')
+        page.wait_for_timeout(500)
+        num = page.locator("#monthBody .dnum").nth(10)
+        target = num.get_attribute("data-dayview")
+        num.click()
+        page.wait_for_timeout(500)
+        assert page.locator("#viewTime").is_visible(), "month date number did not open day view"
+        assert "on" in (page.locator('#viewTabs [data-viewtab="day"]').get_attribute("class") or ""), "day tab not active after number click"
+        assert not page.locator("#qa").is_visible(), "quick add opened instead of day view"
+        report["date_number_day"] = [target, page.inner_text("#htitle")]
+        assert f"{int(target.split('-')[2])}일" in page.inner_text("#htitle"), page.inner_text("#htitle")
+        page.screenshot(path=str(OUT / "03b-date-number-day.png"))
+        # 숫자 단축키: 3 월간 · 2 주간 · 4 일정 · 1 일간
+        page.keyboard.press("3")
+        page.wait_for_timeout(400)
+        assert page.locator("#viewMonth").is_visible(), "3 key did not open month"
+        page.keyboard.press("2")
+        page.wait_for_timeout(400)
+        assert page.locator("#viewTime").is_visible() and "on" in (page.locator('#viewTabs [data-viewtab="week"]').get_attribute("class") or ""), "2 key did not open week"
+        page.keyboard.press("4")
+        page.wait_for_timeout(400)
+        assert page.locator("#viewSchedule").is_visible(), "4 key did not open schedule"
+        page.keyboard.press("1")
+        page.wait_for_timeout(400)
+        assert page.locator("#viewTime").is_visible() and "on" in (page.locator('#viewTabs [data-viewtab="day"]').get_attribute("class") or ""), "1 key did not open day"
+        page.keyboard.press("3")
+        page.wait_for_timeout(400)
+        assert page.locator("#viewMonth").is_visible()
+        page.click('#viewTabs [data-viewtab="week"]')   # 다음 단계(끌어 만들기)는 주간 화면에서 시작합니다
+        page.wait_for_timeout(500)
+    step("date_number_day", date_number_day)
 
     def drag_create():
         col = page.locator("#tvInner .tday").nth(2)
@@ -225,9 +272,7 @@ with sync_playwright() as p:
     step("drag_create", drag_create)
 
     def detail_send():
-        page.click("#viewBtn")
-        page.wait_for_timeout(120)
-        page.click('#viewMenu [data-view="month"]')
+        page.click('#viewTabs [data-viewtab="month"]')
         page.wait_for_timeout(500)
         page.locator("#monthBody .chip").first.click()
         page.wait_for_timeout(400)
@@ -260,10 +305,56 @@ with sync_playwright() as p:
             page.click("#popClose")
     step("edit_modal", edit_modal)
 
+    def event_done_color():
+        page.locator("#monthBody .chip").first.click()
+        page.wait_for_timeout(350)
+        assert page.locator("#pop").is_visible(), "popover not visible"
+        title = page.inner_text("#popTitle")
+        # 1) 이 일정만의 색 지정
+        page.click("#popEdit")
+        page.wait_for_timeout(400)
+        assert page.locator("#mColors [data-evcolor]").count() >= 10, "event color palette missing"
+        page.click('#mColors [data-evcolor="#d50000"]')
+        page.click("#mSave")
+        page.wait_for_timeout(500)
+        evs = json.loads(page.evaluate("localStorage.getItem('pcal.events.v1')"))
+        target = [e for e in evs if e.get("title") == title][0]
+        evid = target["id"]
+        assert target.get("color") == "#d50000", target
+        chip = page.locator(f'#monthBody .chip[data-key^="{evid}@"]').first
+        assert "#d50000" in (chip.get_attribute("style") or ""), chip.get_attribute("style")
+        # 2) 완료 토글 → 흑색 + ✓ + 취소선
+        chip.click()
+        page.wait_for_timeout(350)
+        page.click("#popDone")
+        page.wait_for_timeout(500)
+        evs = json.loads(page.evaluate("localStorage.getItem('pcal.events.v1')"))
+        target = [e for e in evs if e["id"] == evid][0]
+        assert target.get("done") is True, target
+        chip = page.locator(f'#monthBody .chip[data-key^="{evid}@"]').first
+        style = chip.get_attribute("style") or ""
+        cls = chip.get_attribute("class") or ""
+        assert "#3f4042" in style, style
+        assert "done" in cls, cls
+        assert "✓" in chip.inner_text(), chip.inner_text()
+        report["done_chip"] = [style, cls, chip.inner_text().strip()]
+        page.screenshot(path=str(OUT / "07b-done.png"))
+        # 3) 완료 취소 → 원래 색으로 복귀
+        chip.click()
+        page.wait_for_timeout(350)
+        page.click("#popDone")
+        page.wait_for_timeout(500)
+        evs = json.loads(page.evaluate("localStorage.getItem('pcal.events.v1')"))
+        target = [e for e in evs if e["id"] == evid][0]
+        assert target.get("done") is False, target
+        chip = page.locator(f'#monthBody .chip[data-key^="{evid}@"]').first
+        assert "#d50000" in (chip.get_attribute("style") or ""), chip.get_attribute("style")
+        if page.locator("#pop").is_visible():
+            page.click("#popClose")
+    step("event_done_color", event_done_color)
+
     def schedule():
-        page.click("#viewBtn")
-        page.wait_for_timeout(120)
-        page.click('#viewMenu [data-view="schedule"]')
+        page.click('#viewTabs [data-viewtab="schedule"]')
         page.wait_for_timeout(500)
         report["schedule_items"] = page.locator("#sch .sch-item").count()
         assert report["schedule_items"] > 0
@@ -334,20 +425,49 @@ with sync_playwright() as p:
     step("mobile_drawer", mobile_drawer)
 
     def mobile_week():
-        mp.tap("#viewBtn")
-        mp.wait_for_timeout(200)
-        mp.tap('#viewMenu [data-view="week"]')
+        mp.tap('#viewStrip [data-viewtab="week"]')
         mp.wait_for_timeout(700)
         report["mobile_week_tevs"] = mp.locator("#tvInner .tev").count()
         report["mobile_week_overflow_x"] = mp.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")
         mp.screenshot(path=str(OUT / "15-mobile-week.png"))
     step("mobile_week", mobile_week)
 
+    def mobile_date_number():
+        # 월간 날짜 숫자 → 일간 보기 (모바일)
+        mp.tap('#viewStrip [data-viewtab="month"]')
+        mp.wait_for_timeout(500)
+        num = mp.locator("#monthBody .dnum").nth(8)
+        target = num.get_attribute("data-dayview")
+        num.tap()
+        mp.wait_for_timeout(500)
+        assert mp.locator("#viewTime").is_visible(), "mobile date number did not open day view"
+        assert "on" in (mp.locator('#viewStrip [data-viewtab="day"]').get_attribute("class") or ""), "mobile day tab not active"
+        report["mobile_date_number"] = [target, mp.inner_text("#htitle")]
+        day = int(target.split("-")[2])
+        head = mp.inner_text("#htitle")
+        assert f"{day}일" in head or f". {day}." in head, head
+        # 일간 날짜 머리 → 주간
+        mp.tap("#tvHead .tv-hcell")
+        mp.wait_for_timeout(500)
+        assert "on" in (mp.locator('#viewStrip [data-viewtab="week"]').get_attribute("class") or ""), "mobile day head did not open week"
+        # 월간으로 돌아와 일요일 숫자가 잘리지 않는지 확인
+        mp.tap('#viewStrip [data-viewtab="month"]')
+        mp.wait_for_timeout(500)
+        geo = mp.evaluate("""()=>{
+          const d=document.querySelector('#monthBody .cell:first-child .dnum').getBoundingClientRect();
+          const c=document.querySelector('#monthBody .cell:first-child').getBoundingClientRect();
+          return {dx:d.x, dw:d.width, cx:c.x, cw:c.width,
+                  sw:document.documentElement.scrollWidth, iw:window.innerWidth};}""")
+        report["mobile_sunday_dnum"] = geo
+        assert geo["dx"] >= 4, geo
+        assert geo["dw"] >= 24, geo
+        assert geo["sw"] <= geo["iw"] + 1, geo
+        mp.screenshot(path=str(OUT / "15b-mobile-month-fixed.png"))
+    step("mobile_date_number", mobile_date_number)
+
     def mobile_quickadd():
         mp.evaluate("document.body.classList.remove('drawer-open')")
-        mp.tap("#viewBtn")
-        mp.wait_for_timeout(150)
-        mp.tap('#viewMenu [data-view="month"]')
+        mp.tap('#viewStrip [data-viewtab="month"]')
         mp.wait_for_timeout(500)
         cell = mp.locator("#monthBody .cell[data-date]").nth(20)
         cb = cell.bounding_box()

@@ -1,5 +1,5 @@
 /**
- * 내 캘린더 — 비공개 구글 시트 백엔드 (Google Apps Script) v1.1.0
+ * 내 캘린더 — 비공개 구글 시트 백엔드 (Google Apps Script) v1.2.0
  * =============================================================
  * 구글 캘린더 스타일 개인 캘린더 + 육아(아이 일정·준비물·시간표)의 저장소입니다.
  *  · 일정·육아 일정은 이 스프레드시트(비공개)에만 저장됩니다.
@@ -23,8 +23,13 @@
  * 코드를 고친 뒤에는 반드시 배포 → 배포 관리 → 수정(연필) → 버전: 새 버전 → 배포.
  *
  * 시트 구성 (처음 호출할 때 자동으로 만듭니다)
- *  · 일정   : ID | 제목 | 시작 | 종료 | 종일 | 반복 | 캘린더ID | 장소 | 메모 | 구글전송ID | 수정시각
+ *  · 일정   : ID | 제목 | 시작 | 종료 | 종일 | 반복 | 캘린더ID | 장소 | 메모 | 구글전송ID | 수정시각 | 색상 | 완료
  *             시작/종료 형식  종일=Y → `2026-11-25` / 시간 일정 → `2026-11-25T15:00`
+ *             색상=일정 하나만의 색(`#3f4042` 등, 비어 있으면 캘린더 색) / 완료=Y·N(완료는 흑색 체크로 표시)
+ *             ※ v1.2.0 은 기존 시트의 앞 11개 열을 그대로 두고 '색상'·'완료' 열만 끝에 덧붙입니다.
+ *               앱을 새로 고쳐도 새 열이 자동으로 생기지만, 두 기기 동기화에 색·완료를 쓰려면
+ *               이 Code.gs 를 붙여 넣고 [배포 → 배포 관리 → 수정 → 새 버전]으로 한 번 다시 배포해야 합니다.
+ *               (재배포 전에는 앱이 색·완료를 그 기기에만 보관합니다.)
  *  · 캘린더 : ID | 이름 | 색상 | 표시여부 | 순서 | 수정시각
  *             수정시각은 그 캘린더(이름·색상·표시여부·순서)를 마지막으로 고친 시각입니다.
  *             앱은 이 값으로 '시트와 이 기기 중 더 최근 것'을 골라 씁니다(이름이 되돌아가는 것 방지).
@@ -50,6 +55,7 @@
  *  ?action=load                      응답에 kids:{children:[...], events:[...]} 도 들어 있습니다.
  *  ?action=exportToGoogleCalendar {event} | {id}
  *                                    내 구글 캘린더 기본 캘린더에 일정을 만들고 eventId를 시트에 기록
+ *                                    일정 색은 구글 색 ID로 옮기고, 완료·흑색 일정은 8(그래파이트)로 보냅니다.
  *  ?callback=함수이름                 JSONP 로 감싸서 응답
  *
  * 안전장치
@@ -66,12 +72,12 @@
 /** 스프레드시트 ID. 시트에 붙인(컨테이너 바인딩) 스크립트라면 비워 두세요. */
 var SHEET_ID = '';
 
-var BACKEND_VERSION = '1.1.0';
+var BACKEND_VERSION = '1.2.0';
 
 var TABS = { events: '일정', calendars: '캘린더', settings: '설정', kidsEvents: '육아일정', kidsProfile: '육아프로필' };
 
 var HEADERS = {
-  events: ['ID', '제목', '시작', '종료', '종일', '반복', '캘린더ID', '장소', '메모', '구글전송ID', '수정시각'],
+  events: ['ID', '제목', '시작', '종료', '종일', '반복', '캘린더ID', '장소', '메모', '구글전송ID', '수정시각', '색상', '완료'],
   calendars: ['ID', '이름', '색상', '표시여부', '순서', '수정시각'],
   settings: ['항목', '값', '비고'],
   kidsEvents: ['ID', '제목', '아이', '종류', '날짜', '마지막날', '종일', '시작', '끝', '장소', '메모', '준비물', '반복', '제외날짜', '수정시각'],
@@ -179,12 +185,47 @@ function sheet_(name, headers) {
     sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f1f3f4');
     sh.setFrozenRows(1);
   } else {
-    var first = sh.getRange(1, 1, 1, headers.length).getValues()[0];
-    var missing = false;
-    for (var i = 0; i < headers.length; i++) if (String(first[i] || '') === '') missing = true;
-    if (missing) sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    ensureColumns_(sh, headers);
   }
   return sh;
+}
+
+/** 기존 시트에 없던 열(예: 색상·완료)을 지금 열 끝에 덧붙입니다. 있던 열과 그 순서는 건드리지 않습니다. */
+function ensureColumns_(sh, headers) {
+  var last = Math.max(1, sh.getLastColumn());
+  var row = sh.getRange(1, 1, 1, Math.max(last, headers.length)).getValues()[0];
+  var have = {};
+  for (var i = 0; i < row.length; i++) {
+    var k = String(row[i] || '').trim();
+    if (k) have[k] = true;
+  }
+  var missing = [];
+  for (var j = 0; j < headers.length; j++) if (!have[headers[j]]) missing.push(headers[j]);
+  if (!missing.length) return sh;
+  sh.getRange(1, last + 1, 1, missing.length).setValues([missing]).setFontWeight('bold').setBackground('#f1f3f4');
+  if (sh.getFrozenRows() === 0) sh.setFrozenRows(1);
+  return sh;
+}
+
+/** 1행 머리말을 읽어 '열 이름 → 0부터 시작하는 열 번호' 지도를 만듭니다. 없는 열은 -1. */
+function headerMap_(sh, headers) {
+  var width = Math.max(1, sh.getLastColumn(), headers.length);
+  var row = sh.getRange(1, 1, 1, width).getValues()[0];
+  var map = {};
+  for (var i = 0; i < row.length; i++) {
+    var k = String(row[i] || '').trim();
+    if (k) map[k] = i;
+  }
+  for (var j = 0; j < headers.length; j++) if (!(headers[j] in map)) map[headers[j]] = -1;
+  return map;
+}
+
+function cell_(r, map, name) {
+  var i = map[name];
+  return (i >= 0 && i < r.length) ? r[i] : '';
+}
+function truthy_(v) {
+  return v === true || String(v || '').toUpperCase() === 'Y' || String(v || '').toUpperCase() === 'TRUE';
 }
 
 function setup_() {
@@ -244,23 +285,28 @@ function readEvents_(ss) {
   var sh = ss.getSheetByName(TABS.events);
   var out = [];
   if (!sh || sh.getLastRow() < 2) return out;
+  ensureColumns_(sh, HEADERS.events);          // 색상·완료 열이 없던 시트도 읽기 전에 채워 둡니다
+  var map = headerMap_(sh, HEADERS.events);
+  var width = Math.max(1, sh.getLastColumn());
   var last = sh.getLastRow();
-  var rows = sh.getRange(2, 1, last - 1, HEADERS.events.length).getValues();
+  var rows = sh.getRange(2, 1, last - 1, width).getValues();
   rows.forEach(function (r) {
-    var id = String(r[0] || '').trim();
+    var id = String(cell_(r, map, 'ID') || '').trim();
     if (!id) return;
     out.push({
       id: id,
-      title: String(r[1] || ''),
-      start: toText_(r[2]),
-      end: toText_(r[3]),
-      allDay: String(r[4] || '').toUpperCase() === 'Y',
-      repeat: String(r[5] || 'none') || 'none',
-      calId: String(r[6] || ''),
-      location: String(r[7] || ''),
-      memo: String(r[8] || ''),
-      googleId: String(r[9] || ''),
-      updatedAt: toText_(r[10])
+      title: String(cell_(r, map, '제목') || ''),
+      start: toText_(cell_(r, map, '시작')),
+      end: toText_(cell_(r, map, '종료')),
+      allDay: truthy_(cell_(r, map, '종일')),
+      repeat: String(cell_(r, map, '반복') || 'none') || 'none',
+      calId: String(cell_(r, map, '캘린더ID') || ''),
+      location: String(cell_(r, map, '장소') || ''),
+      memo: String(cell_(r, map, '메모') || ''),
+      googleId: String(cell_(r, map, '구글전송ID') || ''),
+      updatedAt: toText_(cell_(r, map, '수정시각')),
+      color: String(cell_(r, map, '색상') || ''),
+      done: truthy_(cell_(r, map, '완료'))
     });
   });
   return out;
@@ -305,32 +351,51 @@ function saveEvent_(req) {
   var ev = req.event || req;
   if (!ev || !ev.id) return { ok: false, error: '일정 ID가 없습니다.' };
   var sh = sheet_(TABS.events, HEADERS.events);
+  var map = headerMap_(sh, HEADERS.events);
+  var width = eventWidth_(map);
   var row = findRow_(sh, ev.id);
 
   var keepGoogleId = '';
-  if (row > 0) keepGoogleId = String(sh.getRange(row, 10).getValue() || '');
+  if (row > 0 && map['구글전송ID'] >= 0) keepGoogleId = String(sh.getRange(row, map['구글전송ID'] + 1).getValue() || '');
   var googleId = String(ev.googleId || keepGoogleId || '');
 
-  var values = [[
-    String(ev.id),
-    String(ev.title || ''),
-    String(ev.start || ''),
-    String(ev.end || ev.start || ''),
-    ev.allDay ? 'Y' : 'N',
-    String(ev.repeat || 'none'),
-    String(ev.calId || ''),
-    String(ev.location || ''),
-    String(ev.memo || ''),
-    googleId,
-    String(ev.updatedAt || new Date().toISOString())
-  ]];
+  var values = eventRow_(ev, map, width, googleId);
   if (row > 0) {
-    sh.getRange(row, 1, 1, values[0].length).setValues(values);
+    sh.getRange(row, 1, 1, width).setValues([values]);
   } else {
     if (sh.getLastRow() >= MAX_EVENTS + 1) return { ok: false, error: '일정이 너무 많습니다(최대 ' + MAX_EVENTS + '개).' };
-    sh.getRange(sh.getLastRow() + 1, 1, 1, values[0].length).setValues(values);
+    sh.getRange(sh.getLastRow() + 1, 1, 1, width).setValues([values]);
   }
   return { ok: true, id: String(ev.id), googleId: googleId };
+}
+
+/** 일정 한 건을 머리말 순서에 맞춰 한 줄로 만듭니다(기존 열·순서를 그대로 따릅니다). */
+function eventRow_(ev, map, width, googleId) {
+  var values = new Array(width);
+  for (var i = 0; i < width; i++) values[i] = '';
+  function put(name, v) { var i = map[name]; if (i >= 0 && i < width) values[i] = v; }
+  put('ID', String(ev.id || ''));
+  put('제목', String(ev.title || ''));
+  put('시작', String(ev.start || ''));
+  put('종료', String(ev.end || ev.start || ''));
+  put('종일', ev.allDay ? 'Y' : 'N');
+  put('반복', String(ev.repeat || 'none'));
+  put('캘린더ID', String(ev.calId || ''));
+  put('장소', String(ev.location || ''));
+  put('메모', String(ev.memo || ''));
+  put('구글전송ID', String(googleId || ev.googleId || ''));
+  put('수정시각', String(ev.updatedAt || new Date().toISOString()));
+  put('색상', String(ev.color || ''));
+  put('완료', ev.done ? 'Y' : 'N');
+  return values;
+}
+function eventWidth_(map) {
+  var w = 1;
+  for (var i = 0; i < HEADERS.events.length; i++) {
+    var idx = map[HEADERS.events[i]];
+    if (idx >= 0) w = Math.max(w, idx + 1);
+  }
+  return w;
 }
 
 function deleteEvent_(req) {
@@ -403,29 +468,19 @@ function saveAll_(req) {
   if (events.length > MAX_EVENTS) return { ok: false, error: '한 번에 올릴 수 있는 일정은 ' + MAX_EVENTS + '개까지입니다.' };
 
   var sh = sheet_(TABS.events, HEADERS.events);
+  var map = headerMap_(sh, HEADERS.events);
+  var width = eventWidth_(map);
   var current = Math.max(0, sh.getLastRow() - 1);
   if (!events.length && current > 0 && req.clear !== true) {
     return { ok: false, error: '올릴 일정이 없어 기존 ' + current + '개를 지우지 않았습니다. 정말 비우려면 clear:true 로 보내세요.' };
   }
 
   var rows = events.map(function (ev) {
-    return [
-      String(ev.id || ''),
-      String(ev.title || ''),
-      String(ev.start || ''),
-      String(ev.end || ev.start || ''),
-      ev.allDay ? 'Y' : 'N',
-      String(ev.repeat || 'none'),
-      String(ev.calId || ''),
-      String(ev.location || ''),
-      String(ev.memo || ''),
-      String(ev.googleId || ''),
-      String(ev.updatedAt || new Date().toISOString())
-    ];
+    return eventRow_(ev, map, width, ev.googleId || '');
   }).filter(function (r) { return !!r[0]; });
 
-  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.events.length).clearContent();
-  if (rows.length) sh.getRange(2, 1, rows.length, HEADERS.events.length).setValues(rows);
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, width).clearContent();
+  if (rows.length) sh.getRange(2, 1, rows.length, width).setValues(rows);
 
   if (Array.isArray(calendars) && calendars.length) {
     writeCalendars_(sheet_(TABS.calendars, HEADERS.calendars), calendars);
@@ -602,11 +657,12 @@ function exportToGoogle_(req) {
   if (!id) return { ok: false, error: '보낼 일정 ID가 없습니다.' };
 
   var sh = sheet_(TABS.events, HEADERS.events);
+  var map = headerMap_(sh, HEADERS.events);
   var row = findRow_(sh, id);
 
   // 시트에 기록된 값이 우선입니다(클라이언트가 오래된 사본을 들고 있어도 중복 전송 방지).
   if (row > 0) {
-    var recorded = String(sh.getRange(row, 10).getValue() || '');
+    var recorded = map['구글전송ID'] >= 0 ? String(sh.getRange(row, map['구글전송ID'] + 1).getValue() || '') : '';
     if (recorded) return { ok: true, already: true, googleId: recorded };
   }
   if (ev.googleId) return { ok: true, already: true, googleId: String(ev.googleId) };
@@ -614,6 +670,8 @@ function exportToGoogle_(req) {
   var title = String(ev.title || '(제목 없음)');
   var repeat = String(ev.repeat || 'none');
   var desc = String(ev.memo || '');
+  /* 완료한 일정은 구글 캘린더에서도 흑색(그래파이트)으로 보이게 하고 설명에 표시를 남깁니다. */
+  if (ev.done) desc = (desc ? desc + '\n\n' : '') + '✓ 완료한 일정 (이 앱에서 완료로 체크됨)';
   if (repeat !== 'none') {
     desc = (desc ? desc + '\n\n' : '') +
       '🔁 원본은 ' + repeatLabel_(repeat) + ' 반복 일정입니다. 이 복사본은 첫 회차만 들어갔습니다.';
@@ -642,11 +700,13 @@ function exportToGoogle_(req) {
   }
 
   var gid = created.getId();
+  var gcolor = googleColorId_(ev);
+  if (gcolor) { try { created.setColor(gcolor); } catch (e) {} }
 
   // 시트에도 기록해 두 번째 전송을 막습니다.
   if (row > 0) {
-    sh.getRange(row, 10).setValue(gid);
-    if (!String(ev.updatedAt || '')) sh.getRange(row, 11).setValue(new Date().toISOString());
+    if (map['구글전송ID'] >= 0) sh.getRange(row, map['구글전송ID'] + 1).setValue(gid);
+    if (map['수정시각'] >= 0 && !String(ev.updatedAt || '')) sh.getRange(row, map['수정시각'] + 1).setValue(new Date().toISOString());
   }
   return {
     ok: true,
@@ -655,9 +715,22 @@ function exportToGoogle_(req) {
     start: String(ev.start || ''),
     end: String(ev.end || ''),
     allDay: !!ev.allDay,
+    colorId: gcolor,
     calendar: (function () { try { return cal.getName(); } catch (e) { return ''; } })(),
     repeated: repeat !== 'none'
   };
+}
+
+/** 이 앱의 일정 색 → 구글 캘린더 색 ID. 완료·흑색은 8(그래파이트). */
+function googleColorId_(ev) {
+  if (ev && ev.done) return '8';
+  var c = String((ev && ev.color) || '').toLowerCase();
+  var table = {
+    '#7986cb': '1', '#33b679': '2', '#8e24aa': '3', '#e67c73': '4', '#f6bf26': '5',
+    '#f4511e': '6', '#039be5': '7', '#3f4042': '8', '#616161': '8', '#3f51b5': '9',
+    '#0b8043': '10', '#d50000': '11'
+  };
+  return table[c] || '';
 }
 
 function repeatLabel_(r) {

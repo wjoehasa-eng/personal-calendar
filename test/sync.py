@@ -355,6 +355,58 @@ with sync_playwright() as pw:
     check("2_phone_initial_load", wait_until(lambda: len(titles(ph)) == 2), f"titles={titles(ph)}")
     ph.screenshot(path=str(OUT / "01-phone-before.png"))
 
+    # ---------------------------------------------------------------- 2b. 날짜 숫자 클릭 → 일간 보기 (화면)
+    num = pc.locator("#monthBody .dnum").nth(9)
+    dnum_day = num.get_attribute("data-dayview")
+    num.click()
+    pc.wait_for_timeout(400)
+    check("2b_date_number_opens_day",
+          pc.locator("#viewTime").is_visible() and "on" in (pc.locator('#viewTabs [data-viewtab="day"]').get_attribute("class") or ""),
+          pc.evaluate("document.querySelector('#htitle').textContent"))
+    check("2b_date_number_title", ("%d일" % int(dnum_day.split("-")[2])) in pc.inner_text("#htitle"), pc.inner_text("#htitle"))
+    pc.keyboard.press("3")
+    pc.wait_for_timeout(300)
+    check("2b_key_3_month", pc.locator("#viewMonth").is_visible(), pc.inner_text("#htitle"))
+
+    # ---------------------------------------------------------------- 2c. 개별 색·완료(흑색)가 시트·두 기기에 반영
+    pc.locator("#monthBody .chip", has_text="기존 일정 하나").first.click()
+    pc.wait_for_timeout(300)
+    pc.click("#popEdit")
+    pc.wait_for_timeout(300)
+    pc.click('#mColors [data-evcolor="#d50000"]')
+    pc.click("#mSave")
+    check("2c_sheet_color", wait_until(lambda: BACK.events.get("e-seed-1", {}).get("color") == "#d50000"),
+          str(BACK.events.get("e-seed-1")))
+    foreground(ph)
+    check("2c_phone_color",
+          wait_until(lambda: "#d50000" in (ph.locator('#monthBody .chip[data-key^="e-seed-1@"]').first.get_attribute("style") or "")),
+          ph.locator('#monthBody .chip[data-key^="e-seed-1@"]').first.get_attribute("style"))
+    ph.locator('#monthBody .chip[data-key^="e-seed-1@"]').first.tap()
+    ph.wait_for_timeout(300)
+    ph.tap("#popDone")
+    check("2c_sheet_done", wait_until(lambda: BACK.events.get("e-seed-1", {}).get("done") is True),
+          str(BACK.events.get("e-seed-1")))
+    foreground(pc)
+    check("2c_pc_done",
+          wait_until(lambda: "done" in (pc.locator('#monthBody .chip[data-key^="e-seed-1@"]').first.get_attribute("class") or "")
+                     and "#3f4042" in (pc.locator('#monthBody .chip[data-key^="e-seed-1@"]').first.get_attribute("style") or "")),
+          pc.locator('#monthBody .chip[data-key^="e-seed-1@"]').first.get_attribute("style"))
+    ph.screenshot(path=str(OUT / "01b-phone-done.png"))
+    # 완료 해제 → 시트에도 반영
+    ph.tap("#popDone")
+    check("2c_done_off", wait_until(lambda: BACK.events.get("e-seed-1", {}).get("done") is False),
+          str(BACK.events.get("e-seed-1")))
+
+    # ---------------------------------------------------------------- 2d. 구버전 백엔드(색상·완료 열 없음)에서 읽어도 이 기기 값 보존
+    saved = dict(BACK.events.get("e-seed-1", {}))
+    BACK.events["e-seed-1"] = {k: v for k, v in saved.items() if k not in ("color", "done")}
+    before_pull = stored(pc, "pcal.sync.v1").get("lastPull", 0)
+    pc.evaluate("window.dispatchEvent(new Event('focus'))")
+    check("2d_pull_happened", wait_until(lambda: stored(pc, "pcal.sync.v1").get("lastPull", 0) > before_pull), str(stored(pc, "pcal.sync.v1")))
+    kept = [e for e in stored(pc, "pcal.events.v1") if e.get("id") == "e-seed-1"]
+    check("2d_local_color_kept", bool(kept) and kept[0].get("color") == "#d50000", str(kept))
+    BACK.events["e-seed-1"] = saved
+
     # ---------------------------------------------------------------- 3. PC 수정 → 휴대폰 (핵심)
     edit_title(pc, "기존 일정 하나", "PC에서 고친 제목")
     check("3_sheet_has_pc_edit", wait_until(lambda: BACK.events.get("e-seed-1", {}).get("title") == "PC에서 고친 제목"),

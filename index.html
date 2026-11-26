@@ -380,7 +380,7 @@ input[type=date],input[type=time]{font-family:inherit}
 .reprow{margin-top:6px;flex-wrap:wrap}
 .reprow select,.field .reprow select{width:auto;flex:0 1 auto;min-width:92px}
 .reprow input[type=number]{width:68px;flex:0 0 68px}
-.reprow input[type=date]{flex:0 0 148px;max-width:148px}
+.reprow input[type=date]{flex:0 1 auto;min-width:150px;max-width:180px}
 .reprow .dash{white-space:nowrap}
 #mDowWrap .kchip,#kDowWrap .kchip{min-width:38px;justify-content:center}
 .scope-foot{flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
@@ -1068,7 +1068,7 @@ body.tab-kids .sidebar{display:none}
             <span class="dash" id="kRepUnit">주마다</span>
           </div>
           <div id="kDowWrap" hidden><div class="kpick kdow" id="kDow"></div></div>
-          <div class="dtrow" id="kEndWrap" hidden>
+          <div class="dtrow reprow" id="kEndWrap" hidden>
             <select id="kEndType"><option value="never">계속</option><option value="until">날짜까지</option><option value="count">횟수</option></select>
             <input type="date" id="kUntil">
             <input type="number" id="kCount" min="1" max="500" value="12" hidden>

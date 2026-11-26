@@ -33,17 +33,19 @@ CALS = [
 ]
 
 
-def ev(id, title, start, end=None, allday=False, updated=None):
+def ev(id, title, start, end=None, allday=False, updated=None, rrule="", exdates=None):
     return {
         "id": id, "title": title, "start": start, "end": end or start,
         "allDay": allday, "repeat": "none", "calId": "personal", "location": "",
         "memo": "", "googleId": "", "updatedAt": updated or "2026-11-25T00:00:00.000Z",
+        "rrule": rrule, "exdates": exdates or [],
     }
 
 
 # ---------------------------------------------------------------- mock 백엔드
 class Backend:
     def __init__(self):
+        self.version = "1.2.0"          # 1.2.0 미만이면 『색상』『완료』 열이 없는 예전 시트를 흉내 냅니다
         self.events = {}
         self.calendars = [dict(c) for c in CALS]
         self.kids_children = []
@@ -52,8 +54,25 @@ class Backend:
         self.calls = []
         self.lock = threading.Lock()
 
-    def reset(self, events, kids=None):
-        self.events = {e["id"]: dict(e) for e in events}
+    def old_columns(self):
+        """예전 백엔드(1.2.0 미만): 일정 탭에 『색상』『완료』 열이 없어 그 값은 저장되지 않습니다."""
+        try:
+            return float(self.version.split(".")[1]) < 2
+        except Exception:
+            return True
+
+    def keep(self, e):
+        """실서버처럼 그 시트에 있는 열만 저장합니다."""
+        e = dict(e)
+        if self.old_columns():
+            e.pop("color", None)
+            e.pop("done", None)
+        return e
+
+    def reset(self, events, kids=None, version=None):
+        if version is not None:
+            self.version = version
+        self.events = {e["id"]: self.keep(e) for e in events}
         self.calendars = [dict(c) for c in CALS]
         self.kids_children = [dict(c) for c in ((kids or {}).get("children") or [])]
         self.kids_events = {e["id"]: dict(e) for e in ((kids or {}).get("events") or [])}
@@ -61,7 +80,7 @@ class Backend:
         self.calls = []
 
     def load(self):
-        return {"ok": True, "version": "1.1.0", "events": list(self.events.values()),
+        return {"ok": True, "version": self.version, "events": list(self.events.values()),
                 "calendars": self.calendars, "settings": {},
                 "kids": {"children": self.kids_children, "events": list(self.kids_events.values())}}
 
@@ -71,7 +90,7 @@ class Backend:
             if self.fail and action not in ("ping", "load"):
                 return {"ok": False, "error": "모의 백엔드 저장 실패"}
             if action in ("ping", "status"):
-                return {"ok": True, "version": "1.0.0", "now": "2026-11-26T00:00:00.000Z",
+                return {"ok": True, "version": self.version, "now": "2026-11-26T00:00:00.000Z",
                         "sheet": "[비공개] 내 캘린더", "timezone": "Asia/Seoul"}
             if action == "load":
                 return self.load()
@@ -82,7 +101,7 @@ class Backend:
                 old = self.events.get(e["id"], {})
                 e = dict(e)
                 e["googleId"] = e.get("googleId") or old.get("googleId") or ""
-                self.events[e["id"]] = e
+                self.events[e["id"]] = self.keep(e)
                 return {"ok": True, "id": e["id"], "googleId": e["googleId"]}
             if action == "deleteEvent":
                 self.events.pop(data.get("id"), None)
@@ -102,7 +121,7 @@ class Backend:
                     return {"ok": False, "error": "일정 목록이 없습니다."}
                 if not events and self.events and data.get("clear") is not True:
                     return {"ok": False, "error": "올릴 일정이 없어 지우지 않았습니다."}
-                self.events = {e["id"]: dict(e) for e in events if e.get("id")}
+                self.events = {e["id"]: self.keep(e) for e in events if e.get("id")}
                 cals = data.get("calendars")
                 if isinstance(cals, list) and cals:
                     self.calendars = [dict(c) for c in cals]
@@ -754,6 +773,190 @@ with sync_playwright() as pw:
           f"titles={kid_titles(kph)}")
     kpc.screenshot(path=str(OUT / "06-pc-kids-home.png"))
     kpc.close(); k_pc_ctx.close(); kph.close(); k_ph_ctx.close()
+
+    # ---------------------------------------------------------------- 21. 구버전(v1.1.0) 백엔드 — 색·완료·반복 규칙을 메모 태그로 동기화
+    BACK.reset([
+        ev("e-old-1", "옛 시트 일정 하나", "2026-11-27T10:00", "2026-11-27T11:00"),
+        ev("e-old-2", "옛 시트 반복 일정", "2026-11-26T09:00", "2026-11-26T09:30",
+           rrule="FREQ=WEEKLY;BYDAY=MO,TU,TH"),
+        ev("e-old-3", "옛 시트 보통 일정", "2026-11-29"),
+        ev("e-old-4", "옛 시트 보통 일정 둘", "2026-11-30T14:00", "2026-11-30T15:00"),
+    ], version="1.1.0")
+    old_pc_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900},
+                                     locale="ko-KR", timezone_id="Asia/Seoul")
+    old_pc_ctx.route("https://script.google.com/**", mock_route)
+    old_pc = new_page(old_pc_ctx, "oldpc")
+    old_ph_ctx = browser.new_context(service_workers="block", viewport={"width": 390, "height": 844}, is_mobile=True,
+                                     has_touch=True, locale="ko-KR", timezone_id="Asia/Seoul")
+    old_ph_ctx.route("https://script.google.com/**", mock_route)
+    old_ph = new_page(old_ph_ctx, "oldph")
+    check("21_old_backend_loaded", wait_until(lambda: len(titles(old_pc)) == 4, timeout=15), f"titles={titles(old_pc)}")
+    check("21_old_backend_version", stored(old_pc, "pcal.sync.v1").get("backend") == "1.1.0",
+          str(stored(old_pc, "pcal.sync.v1")))
+
+    def memo_of(i):
+        return str(BACK.events.get(i, {}).get("memo", ""))
+
+    def has_tag(i):
+        return "[[pcal:" in memo_of(i)
+
+    # PC에서 색 고르기 → 구버전 시트에는 『색상』 열이 없어 메모 태그로 실려야 합니다
+    old_pc.locator('#monthBody .chip[data-key^="e-old-1@"]').first.click()
+    old_pc.wait_for_timeout(300)
+    old_pc.click("#popEdit")
+    old_pc.wait_for_timeout(300)
+    old_pc.click('#mColors [data-evcolor="#d50000"]')
+    old_pc.click("#mSave")
+    check("21_old_sheet_no_color_column", wait_until(lambda: "color" not in BACK.events.get("e-old-1", {})),
+          str(BACK.events.get("e-old-1")))
+    check("21_old_sheet_memo_tag", wait_until(lambda: has_tag("e-old-1") and "color=#d50000" in memo_of("e-old-1")),
+          memo_of("e-old-1"))
+    foreground(old_ph)
+    check("21_old_phone_color",
+          wait_until(lambda: "#d50000" in (old_ph.locator('#monthBody .chip[data-key^="e-old-1@"]').first.get_attribute("style") or "")),
+          old_ph.locator('#monthBody .chip[data-key^="e-old-1@"]').first.get_attribute("style"))
+    check("21_old_phone_memo_clean", "pcal" not in old_ph.evaluate(
+        "(JSON.parse(localStorage.getItem('pcal.events.v1')||'[]').find(e=>e.id==='e-old-1')||{}).memo||''"),
+        old_ph.evaluate("(JSON.parse(localStorage.getItem('pcal.events.v1')||'[]').find(e=>e.id==='e-old-1')||{}).memo||''"))
+
+    # 완료(흑색)도 태그로 — PC에서 완료 표시
+    old_pc.locator('#monthBody .chip[data-key^="e-old-3@"]').first.click()
+    old_pc.wait_for_timeout(250)
+    old_pc.click("#popDone")
+    old_pc.wait_for_timeout(500)
+    check("21_old_sheet_done_tag", wait_until(lambda: "done=1" in memo_of("e-old-3")), memo_of("e-old-3"))
+    foreground(old_ph)
+    check("21_old_phone_done",
+          wait_until(lambda: "done" in (old_ph.locator('#monthBody .chip[data-key^="e-old-3@"]').first.get_attribute("class") or "")
+                     and "#3f4042" in (old_ph.locator('#monthBody .chip[data-key^="e-old-3@"]').first.get_attribute("style") or "")),
+          old_ph.locator('#monthBody .chip[data-key^="e-old-3@"]').first.get_attribute("style"))
+    check("21_plain_event_no_tag", memo_of("e-old-4") == "", memo_of("e-old-4"))
+
+    # 반복 규칙(요일 다중 + 종료일)도 태그로 — PC에서 월·화·목 + 2026-12-17까지
+    old_pc.locator('#monthBody .chip[data-key^="e-old-2@"]').first.click()
+    old_pc.wait_for_timeout(250)
+    old_pc.click("#popEdit")
+    old_pc.wait_for_timeout(300)
+    old_pc.select_option("#mRepeat", "custom")
+    old_pc.wait_for_timeout(200)
+    for d in ("MO", "TU", "TH"):
+        btn = old_pc.locator('#mDow [data-kd="%s"]' % d)
+        if "on" not in (btn.get_attribute("class") or ""):
+            btn.click()
+    old_pc.select_option("#mEndType", "until")
+    old_pc.fill("#mUntil", "2026-12-17")
+    old_pc.wait_for_timeout(150)
+    old_pc.click("#mSave")
+    check("21_old_sheet_rrule_tag",
+          wait_until(lambda: "rrule=" in memo_of("e-old-2") and "20261217" in memo_of("e-old-2")),
+          memo_of("e-old-2"))
+    foreground(old_ph)
+    check("21_old_phone_rrule",
+          wait_until(lambda: "FREQ=WEEKLY" in str(([e for e in stored(old_ph, 'pcal.events.v1') if e.get('id') == 'e-old-2'] or [{}])[0].get('rrule'))
+                     and "20261217" in str(([e for e in stored(old_ph, 'pcal.events.v1') if e.get('id') == 'e-old-2'] or [{}])[0].get('rrule'))),
+          str([e for e in stored(old_ph, 'pcal.events.v1') if e.get('id') == 'e-old-2']))
+    # 그 규칙대로 폰 화면에도 월·화·목 회차가 보입니다 — 12월에서 확인(12/1 화, 12/3 목 …)
+    old_ph.click("#nextBtn")
+    old_ph.wait_for_timeout(500)
+    check("21_old_phone_rrule_1210", old_ph.locator('#monthBody .chip[data-key="e-old-2@2026-12-03"]').count() == 1,
+          str(old_ph.locator('#monthBody .chip[data-key^="e-old-2@"]').count()))
+    check("21_old_phone_not_plain_weekly", old_ph.locator('#monthBody .chip[data-key="e-old-2@2026-12-02"]').count() == 0,
+          "수요일 회차가 생기면 안 됩니다")
+
+    # ---------------------------------------------------------------- 22. 반복 일정 수정·삭제 범위(이 일정만 / 이 일정 및 향후 / 모든 일정)
+    # (a) PC에서 '이 일정만' 삭제 → 시트 태그(exdates) → 폰에서도 그 회차만 사라짐
+    old_pc.click("#nextBtn")
+    old_pc.wait_for_timeout(500)
+    old_pc.locator('#monthBody .chip[data-key="e-old-2@2026-12-01"]').first.click()
+    old_pc.wait_for_timeout(250)
+    old_pc.click("#popDel")
+    old_pc.wait_for_timeout(300)
+    check("22_scope_dialog_shown", old_pc.is_visible("#scope"), "scope dialog")
+    old_pc.click('#scopeFoot [data-scope="one"]')
+    check("22_one_memo_exdates", wait_until(lambda: "exdates=" in memo_of("e-old-2")), memo_of("e-old-2"))
+    foreground(old_ph)
+    check("22_one_phone_dropped",
+          wait_until(lambda: old_ph.locator('#monthBody .chip[data-key="e-old-2@2026-12-01"]').count() == 0),
+          str(old_ph.locator('#monthBody .chip[data-key="e-old-2@2026-12-01"]').count()))
+    check("22_one_phone_keeps_others", old_ph.locator('#monthBody .chip[data-key="e-old-2@2026-12-03"]').count() == 1,
+          str(old_ph.locator('#monthBody .chip[data-key^="e-old-2@"]').count()))
+
+    # (b) PC에서 '이 일정 및 향후' 수정 → 원본은 12/7까지로 잘리고, 12/8부터 새 시리즈
+    old_pc.locator('#monthBody .chip[data-key="e-old-2@2026-12-08"]').first.click()
+    old_pc.wait_for_timeout(250)
+    old_pc.click("#popEdit")
+    old_pc.wait_for_timeout(300)
+    old_pc.fill("#mTitle", "옛 시트 반복 일정(이후)")
+    old_pc.click("#mSave")
+    old_pc.wait_for_timeout(300)
+    old_pc.click('#scopeFoot [data-scope="following"]')
+    old_pc.wait_for_timeout(700)
+    rows = list(BACK.events.values())
+    check("22_following_two_sheets",
+          wait_until(lambda: len([e for e in BACK.events.values() if "옛 시트 반복 일정" in e.get("title", "")]) == 2),
+          str([(e.get("title"), e.get("start")) for e in rows]))
+    check("22_following_cut_until",
+          wait_until(lambda: "20261207" in memo_of("e-old-2")), memo_of("e-old-2"))
+    foreground(old_ph)
+    check("22_following_phone_new",
+          wait_until(lambda: "옛 시트 반복 일정(이후)" in titles(old_ph)), f"titles={titles(old_ph)}")
+    check("22_following_phone_cut",
+          wait_until(lambda: "UNTIL=20261207" in str(([e for e in stored(old_ph, 'pcal.events.v1') if e.get('id') == 'e-old-2'] or [{}])[0].get('rrule'))),
+          str([e for e in stored(old_ph, 'pcal.events.v1') if e.get('id') == 'e-old-2']))
+    old_pc.screenshot(path=str(OUT / "07-pc-old-backend.png"))
+    old_ph.screenshot(path=str(OUT / "08-phone-old-backend.png"))
+    old_pc.close(); old_pc_ctx.close(); old_ph.close(); old_ph_ctx.close()
+
+    # ---------------------------------------------------------------- 23. 육아 반복 일정 — 요일 다중·종료일, '이 일정만' 수정
+    BACK.reset([], version="1.2.0")
+    TODAY2 = __import__("datetime").date.today().isoformat()
+    k2_pc_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900}, locale="ko-KR",
+                                    timezone_id="Asia/Seoul")
+    k2_pc_ctx.route("https://script.google.com/**", mock_route)
+    k2pc = new_page(k2_pc_ctx, "k2pc")
+    k2_ph_ctx = browser.new_context(service_workers="block", viewport={"width": 390, "height": 844}, is_mobile=True,
+                                    has_touch=True, locale="ko-KR", timezone_id="Asia/Seoul")
+    k2_ph_ctx.route("https://script.google.com/**", mock_route)
+    k2ph = new_page(k2_ph_ctx, "k2ph")
+    k2pc.click('#tabBar [data-tab="kidHome"]')
+    k2pc.wait_for_timeout(300)
+    k2pc.click("#kidAddBtn")
+    k2pc.wait_for_timeout(350)
+    k2pc.fill("#kTitle", "육아 반복")
+    k2pc.fill("#kDate", TODAY2)
+    k2pc.fill("#kStart", "16:00")
+    k2pc.fill("#kEnd", "17:00")
+    k2pc.select_option("#kRep", "weekly")
+    k2pc.wait_for_timeout(250)
+    wanted = ("MO", "TU", "TH")
+    for d in wanted:
+        b = k2pc.locator('#kDow [data-kd="%s"]' % d)
+        if "on" not in (b.get_attribute("class") or ""):
+            b.click()
+    for d in ("SU", "WE", "FR", "SA"):
+        b = k2pc.locator('#kDow [data-kd="%s"]' % d)
+        if "on" in (b.get_attribute("class") or ""):
+            b.click()
+    k2pc.select_option("#kEndType", "until")
+    k2pc.fill("#kUntil", "2026-12-31")
+    k2pc.click("#kSave")
+    k2pc.wait_for_timeout(700)
+    kid_rules = [e.get("rrule", "") for e in BACK.kids_events.values()]
+    check("23_kid_rrule_multi_dow",
+          wait_until(lambda: any("BYDAY=MO,TU,TH" in (e.get("rrule") or "") and "UNTIL=20261231" in (e.get("rrule") or "")
+                                 for e in BACK.kids_events.values())),
+          str(kid_rules))
+    foreground(k2ph)
+    check("23_phone_kid_rrule",
+          wait_until(lambda: any("BYDAY=MO,TU,TH" in (e.get("rrule") or "")
+                                 for e in stored(k2ph, "pcal.kids.events.v1"))),
+          str([e.get("rrule") for e in stored(k2ph, "pcal.kids.events.v1")]))
+    k2ph.click('#tabBar [data-tab="kidWeek"]')
+    k2ph.wait_for_timeout(500)
+    kid_blocks = k2ph.locator("#kidWeek .kblk[data-kev]").count()
+    check("23_phone_kid_week_blocks", kid_blocks >= 1, str(kid_blocks))
+    k2ph.screenshot(path=str(OUT / "09-phone-kids-rrule.png"))
+    k2pc.close(); k2_pc_ctx.close(); k2ph.close(); k2_ph_ctx.close()
 
     # ---------------------------------------------------------------- 13. 콘솔 오류
     check("14_no_console_errors", not errors, json.dumps(errors[:5], ensure_ascii=False))

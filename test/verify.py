@@ -714,6 +714,240 @@ with sync_playwright() as p:
     step("kids_rename", kids_rename)
     kctx.close()
 
+    # ---------------------------------------------------------------- 반복: 맞춤 규칙(요일 다중·종료일)과 수정·삭제 범위
+    import calendar
+    MONTH_START = (TODAY.replace(day=1) + dt.timedelta(days=32)).replace(day=1)
+
+    def mday(n):
+        return (MONTH_START + dt.timedelta(days=n - 1)).isoformat()
+
+    BY = (0, 2, 4)   # 월·수·금 (파이썬 weekday: 월=0)
+    LAST = 20
+    OCCS = [n for n in range(1, LAST + 1) if (MONTH_START + dt.timedelta(days=n - 1)).weekday() in BY]
+    UNTIL = (MONTH_START + dt.timedelta(days=LAST - 1)).strftime("%Y%m%d")
+
+    rctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="ko-KR",
+                               timezone_id="Asia/Seoul")
+    seed(rctx, [])
+    rp = rctx.new_page()
+    wire(rp, "repeat")
+    rp.goto(BASE, wait_until="load")
+    rp.wait_for_timeout(800)
+    rp.click("#nextBtn")
+    rp.wait_for_timeout(500)
+
+    def rec_state():
+        return json.loads(rp.evaluate("localStorage.getItem('pcal.events.v1')"))
+
+    def rec_by_id(eid):
+        return [e for e in rec_state() if e.get("id") == eid][0]
+
+    def rec_create():
+        rp.click("#createBtn")
+        rp.wait_for_timeout(350)
+        rp.fill("#mTitle", "맞춤 반복 일정")
+        rp.fill("#mStartDate", mday(1))
+        rp.fill("#mStartTime", "10:00")
+        rp.fill("#mEndTime", "11:00")
+        rp.select_option("#mRepeat", "custom")
+        rp.wait_for_timeout(250)
+        assert rp.locator("#mRepPanel").is_visible(), "repeat panel hidden"
+        for wd in ("SU", "MO", "TU", "WE", "TH", "FR", "SA"):
+            btn = rp.locator('#mDow [data-kd="%s"]' % wd)
+            on = "on" in (btn.get_attribute("class") or "")
+            if on != (wd in ("MO", "WE", "FR")):
+                btn.click()
+        rp.select_option("#mEndType", "until")
+        rp.fill("#mUntil", mday(LAST))
+        rp.wait_for_timeout(200)
+        report["rec_hint"] = rp.inner_text("#mRepeatHint")
+        rp.click("#mSave")
+        rp.wait_for_timeout(600)
+        e = [x for x in rec_state() if x.get("title") == "맞춤 반복 일정"][0]
+        report["rec_rrule"] = e.get("rrule")
+        assert e.get("rrule") == "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=" + UNTIL, report["rec_rrule"]
+        assert e.get("repeat") == "weekly", e.get("repeat")
+        n = rp.locator('#monthBody .chip[data-key^="%s@"]' % e["id"]).count()
+        report["rec_chips"] = [n, len(OCCS)]
+        assert n == len(OCCS), report["rec_chips"]
+        rp.screenshot(path=str(OUT / "26-repeat-month.png"))
+    step("rec_custom_rule", rec_create)
+
+    def rec_edit_one():
+        e = [x for x in rec_state() if x.get("title") == "맞춤 반복 일정"][0]
+        occ = mday(OCCS[1])
+        rp.click('#monthBody .chip[data-key="%s@%s"]' % (e["id"], occ))
+        rp.wait_for_timeout(300)
+        rp.click("#popEdit")
+        rp.wait_for_timeout(350)
+        assert rp.input_value("#mStartDate") == occ, rp.input_value("#mStartDate")
+        rp.fill("#mTitle", "맞춤 반복(이 일정만)")
+        rp.click("#mSave")
+        rp.wait_for_timeout(300)
+        assert rp.is_visible("#scope"), "scope dialog missing"
+        rp.click('#scopeFoot [data-scope="one"]')
+        rp.wait_for_timeout(600)
+        series = rec_by_id(e["id"])
+        report["rec_one_exdates"] = series.get("exdates")
+        assert occ in (series.get("exdates") or []), report["rec_one_exdates"]
+        single = [x for x in rec_state() if x.get("title") == "맞춤 반복(이 일정만)"]
+        assert len(single) == 1 and not single[0].get("rrule"), single
+        assert single[0]["start"].startswith(occ), single[0]["start"]
+        assert rp.locator('#monthBody .chip[data-key="%s@%s"]' % (single[0]["id"], occ)).count() == 1
+        assert rp.locator('#monthBody .chip[data-key="%s@%s"]' % (e["id"], occ)).count() == 0
+        rp.screenshot(path=str(OUT / "27-repeat-one.png"))
+    step("rec_edit_one", rec_edit_one)
+
+    def rec_edit_following():
+        e = rec_by_id([x for x in rec_state() if x.get("title") == "맞춤 반복 일정"][0]["id"])
+        occ = mday(OCCS[3])
+        rp.click('#monthBody .chip[data-key="%s@%s"]' % (e["id"], occ))
+        rp.wait_for_timeout(300)
+        rp.click("#popEdit")
+        rp.wait_for_timeout(350)
+        rp.fill("#mTitle", "맞춤 반복(이후)")
+        rp.click("#mSave")
+        rp.wait_for_timeout(300)
+        assert rp.is_visible("#scope")
+        rp.click('#scopeFoot [data-scope="following"]')
+        rp.wait_for_timeout(700)
+        series = rec_by_id(e["id"])
+        report["rec_following_rule"] = series.get("rrule")
+        cut = (dt.date.fromisoformat(occ) - dt.timedelta(days=1)).strftime("%Y%m%d")
+        assert "UNTIL=" + cut in (series.get("rrule") or ""), report["rec_following_rule"]
+        nxt = [x for x in rec_state() if x.get("title") == "맞춤 반복(이후)"]
+        assert len(nxt) == 1, nxt
+        assert nxt[0]["start"].startswith(occ), nxt[0]["start"]
+        assert "BYDAY=MO,WE,FR" in (nxt[0].get("rrule") or ""), nxt[0].get("rrule")
+        report["rec_following_new"] = nxt[0]["id"]
+    step("rec_edit_following", rec_edit_following)
+
+    def rec_delete_one():
+        eid = report["rec_following_new"]
+        occ = mday(OCCS[4])
+        rp.click('#monthBody .chip[data-key="%s@%s"]' % (eid, occ))
+        rp.wait_for_timeout(300)
+        rp.click("#popDel")
+        rp.wait_for_timeout(300)
+        assert rp.is_visible("#scope"), "scope dialog missing on delete"
+        rp.click('#scopeFoot [data-scope="one"]')
+        rp.wait_for_timeout(600)
+        e = rec_by_id(eid)
+        report["rec_del_one"] = e.get("exdates")
+        assert occ in (e.get("exdates") or []), report["rec_del_one"]
+        assert rp.locator('#monthBody .chip[data-key^="%s@"]' % eid).count() >= 1
+    step("rec_delete_one", rec_delete_one)
+
+    def rec_delete_following():
+        eid = report["rec_following_new"]
+        occ = mday(OCCS[5])
+        rp.click('#monthBody .chip[data-key="%s@%s"]' % (eid, occ))
+        rp.wait_for_timeout(300)
+        rp.click("#popDel")
+        rp.wait_for_timeout(300)
+        rp.click('#scopeFoot [data-scope="following"]')
+        rp.wait_for_timeout(700)
+        cut = (dt.date.fromisoformat(occ) - dt.timedelta(days=1)).strftime("%Y%m%d")
+        e = rec_by_id(eid)
+        report["rec_del_following"] = e.get("rrule")
+        assert "UNTIL=" + cut in (e.get("rrule") or ""), report["rec_del_following"]
+    step("rec_delete_following", rec_delete_following)
+
+    def rec_delete_all():
+        sid = [x for x in rec_state() if x.get("title") == "맞춤 반복 일정"][0]["id"]
+        occ = mday(OCCS[2])
+        rp.click('#monthBody .chip[data-key="%s@%s"]' % (sid, occ))
+        rp.wait_for_timeout(300)
+        rp.click("#popDel")
+        rp.wait_for_timeout(300)
+        rp.click('#scopeFoot [data-scope="all"]')
+        rp.wait_for_timeout(600)
+        assert all(x.get("id") != sid for x in rec_state()), "series not deleted"
+        assert rp.locator('#monthBody .chip[data-key^="%s@"]' % sid).count() == 0
+    step("rec_delete_all", rec_delete_all)
+    rctx.close()
+
+    # ---------------------------------------------------------------- 육아 반복: 요일·종료일·수정/삭제 범위
+    monday = TODAY - dt.timedelta(days=TODAY.weekday())
+
+    def kday(n):
+        return (monday + dt.timedelta(days=n)).isoformat()
+
+    k2ctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="ko-KR",
+                                timezone_id="Asia/Seoul")
+    seed_kids(k2ctx)
+    ksr = kid_ev("k9", "육아 데일리", monday.isoformat(), "15:00", "16:00", kids=("kid1",),
+                 rrule="FREQ=DAILY;COUNT=30")
+    k2ctx.add_init_script("try{ localStorage.setItem('pcal.kids.events.v1', %s); }catch(e){}"
+                          % json.dumps(json.dumps(KID_SEED + [ksr], ensure_ascii=False)))
+    kr = k2ctx.new_page()
+    wire(kr, "kidrepeat")
+    kr.goto(BASE, wait_until="load")
+    kr.wait_for_timeout(900)
+    kr.click('#tabBar [data-tab="kidWeek"]')
+    kr.wait_for_timeout(600)
+
+    def kr_state():
+        return json.loads(kr.evaluate("localStorage.getItem('pcal.kids.events.v1')"))
+
+    def kr_by_id(eid):
+        return [e for e in kr_state() if e.get("id") == eid][0]
+
+    def kids_scope_one():
+        assert kr.locator('#kidWeek .kblk[data-kev="k9"]').count() >= 5, \
+            kr.locator('#kidWeek .kblk[data-kev="k9"]').count()
+        occ = kday(2)
+        kr.click('#kidWeek .kblk[data-kev="k9"][data-kdate="%s"]' % occ)
+        kr.wait_for_timeout(400)
+        assert kr.locator("#kModal").is_visible()
+        kr.fill("#kTitle", "육아 데일리(한번만)")
+        kr.click("#kSave")
+        kr.wait_for_timeout(350)
+        assert kr.is_visible("#scope"), "kids scope dialog missing"
+        kr.click('#scopeFoot [data-scope="one"]')
+        kr.wait_for_timeout(600)
+        series = kr_by_id("k9")
+        report["kid_rec_one"] = series.get("exdates")
+        assert occ in (series.get("exdates") or []), report["kid_rec_one"]
+        single = [x for x in kr_state() if x.get("title") == "육아 데일리(한번만)"]
+        assert len(single) == 1 and not single[0].get("rrule"), single
+        assert single[0]["date"] == occ, single[0]["date"]
+        kr.screenshot(path=str(OUT / "28-kids-repeat-one.png"))
+    step("kids_rec_one", kids_scope_one)
+
+    def kids_scope_following():
+        occ = kday(4)
+        kr.click('#kidWeek .kblk[data-kev="k9"][data-kdate="%s"]' % occ)
+        kr.wait_for_timeout(400)
+        kr.fill("#kTitle", "육아 데일리(이후)")
+        kr.click("#kSave")
+        kr.wait_for_timeout(350)
+        assert kr.is_visible("#scope")
+        kr.click('#scopeFoot [data-scope="following"]')
+        kr.wait_for_timeout(700)
+        series = kr_by_id("k9")
+        cut = (dt.date.fromisoformat(occ) - dt.timedelta(days=1)).strftime("%Y%m%d")
+        report["kid_rec_following"] = series.get("rrule")
+        assert "UNTIL=" + cut in (series.get("rrule") or ""), report["kid_rec_following"]
+        nxt = [x for x in kr_state() if x.get("title") == "육아 데일리(이후)"]
+        assert len(nxt) == 1 and nxt[0]["date"] == occ, nxt
+        report["kid_rec_new"] = nxt[0]["id"]
+    step("kids_rec_following", kids_scope_following)
+
+    def kids_scope_all():
+        eid = report["kid_rec_new"]
+        occ = kday(5)
+        kr.click('#kidWeek .kblk[data-kev="%s"][data-kdate="%s"]' % (eid, occ))
+        kr.wait_for_timeout(400)
+        kr.click("#kDel")
+        kr.wait_for_timeout(350)
+        assert kr.is_visible("#scope"), "kids delete scope missing"
+        kr.click('#scopeFoot [data-scope="all"]')
+        kr.wait_for_timeout(600)
+        assert all(x.get("id") != eid for x in kr_state()), "kids series not deleted"
+    step("kids_rec_all", kids_scope_all)
+    k2ctx.close()
+
     # ---------------------------------------------------------------- 육아 (휴대폰 390×844)
     kmctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True,
                                 locale="ko-KR", timezone_id="Asia/Seoul")

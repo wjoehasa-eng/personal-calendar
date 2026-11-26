@@ -377,6 +377,10 @@ input[type=date],input[type=time]{font-family:inherit}
 .row input[type=time]{border:1px solid var(--line2);border-radius:4px;padding:5px 7px;font-size:13px;background:#fff}
 .row .dash{color:var(--muted)}
 .dtrow{display:flex;gap:6px;align-items:center}
+.reprow{margin-top:6px;flex-wrap:wrap}
+#mDowWrap .kchip,#kDowWrap .kchip{min-width:38px;justify-content:center}
+.scope-foot{flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
+.scope-foot .btn{flex:0 0 auto}
 .dtrow input[type=date]{flex:1 1 auto;min-width:0;max-width:180px}
 .dtrow input[type=time]{flex:0 0 112px}
 .ficon svg{width:18px;height:18px;fill:#5f6368;vertical-align:-4px}
@@ -912,11 +916,37 @@ body.tab-kids .sidebar{display:none}
         <div class="fbody">
           <select id="mRepeat">
             <option value="none">반복 안함</option>
+            <option value="daily">매일</option>
             <option value="weekly">매주</option>
+            <option value="weekdays">평일(월~금)</option>
             <option value="monthly">매월</option>
             <option value="yearly">매년</option>
+            <option value="custom">맞춤 반복…</option>
           </select>
-          <div class="hint" id="mRepeatHint" hidden>반복 일정은 이 시리즈 전체에 적용됩니다.</div>
+          <div id="mRepPanel" hidden>
+            <div class="dtrow reprow">
+              <select id="mRepFreq" aria-label="반복 주기">
+                <option value="DAILY">매일</option>
+                <option value="WEEKLY">매주</option>
+                <option value="MONTHLY">매월</option>
+                <option value="YEARLY">매년</option>
+              </select>
+              <input type="number" id="mRepInterval" min="1" max="99" value="1" aria-label="반복 간격">
+              <span class="dash" id="mRepUnit">주마다</span>
+            </div>
+            <div id="mDowWrap" class="reprow" hidden><div class="kpick kdow" id="mDow"></div></div>
+            <div class="dtrow reprow">
+              <select id="mEndType" aria-label="반복 종료">
+                <option value="never">계속</option>
+                <option value="until">종료일 지정</option>
+                <option value="count">횟수 지정</option>
+              </select>
+              <input type="date" id="mUntil">
+              <input type="number" id="mCount" min="1" max="500" value="10">
+              <span class="dash" id="mCountUnit" hidden>회</span>
+            </div>
+            <div class="hint" id="mRepeatHint"></div>
+          </div>
         </div>
       </div>
       <div class="field">
@@ -1017,10 +1047,22 @@ body.tab-kids .sidebar{display:none}
             <option value="none">반복 없음</option>
             <option value="daily">매일</option>
             <option value="weekly">매주</option>
+            <option value="weekdays">평일(월~금)</option>
             <option value="biweekly">2주마다</option>
             <option value="monthly">매월</option>
             <option value="yearly">매년</option>
+            <option value="custom">맞춤 반복…</option>
           </select>
+          <div class="dtrow reprow" id="kRepIvWrap" hidden>
+            <select id="kRepFreq" aria-label="반복 주기">
+              <option value="DAILY">매일</option>
+              <option value="WEEKLY">매주</option>
+              <option value="MONTHLY">매월</option>
+              <option value="YEARLY">매년</option>
+            </select>
+            <input type="number" id="kRepInterval" min="1" max="99" value="1" aria-label="반복 간격">
+            <span class="dash" id="kRepUnit">주마다</span>
+          </div>
           <div id="kDowWrap" hidden><div class="kpick kdow" id="kDow"></div></div>
           <div class="dtrow" id="kEndWrap" hidden>
             <select id="kEndType"><option value="never">계속</option><option value="until">날짜까지</option><option value="count">횟수</option></select>
@@ -1127,13 +1169,22 @@ body.tab-kids .sidebar{display:none}
   </div>
 </div>
 
+<!-- 반복 일정 수정·삭제 범위 -->
+<div class="modal" id="scope" hidden>
+  <div class="modal-card" style="max-width:440px" role="dialog" aria-modal="true" aria-labelledby="scopeTitle">
+    <div class="cb-title" id="scopeTitle">반복 일정</div>
+    <div class="cb-body" id="scopeBody"></div>
+    <div class="modal-foot scope-foot" id="scopeFoot"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <input type="file" id="importFile" accept="application/json" hidden>
 <input type="file" id="kidsImportFile" accept="application/json" hidden>
 
 <script>
 /* =====================================================================
-   내 캘린더 — 단일 파일 앱 (v1.3.0)
+   내 캘린더 — 단일 파일 앱 (v1.3.1)
    개인 캘린더 + 육아 홈·시간표(아이 일정·준비물·학원 시간표)를 한 앱에 담았습니다.
    아래쪽 탭으로 👶 육아 홈 · 🗓️ 시간표 · 📅 개인 캘린더를 오갑니다.
    로컬(localStorage) 또는 비공개 구글 시트(Apps Script)에 저장하고,
@@ -1223,7 +1274,7 @@ let currentPop=null, popXY=null, editing=null, calEditing=null, qaState=null, to
 
 function firstCalId(){ const c=state.cals.find(x=>x.visible!==false)||state.cals[0]; return c?c.id:''; }
 function calById(id){ return state.cals.find(c=>c.id===id)||null; }
-function repeatLabel(r){ return r==='weekly'?'매주':r==='monthly'?'매월':r==='yearly'?'매년':''; }
+function repeatLabel(r){ return r==='daily'?'매일':r==='weekdays'?'평일':r==='weekly'?'매주':r==='monthly'?'매월':r==='yearly'?'매년':''; }
 function startOfWeek(d){ const x=startOfDay(d); return addDays(x, -(((x.getDay()-PREFS.weekStart)+7)%7)); }
 function weekDates(d){ const s=startOfWeek(d); return Array.from({length:7},(_,i)=>addDays(s,i)); }
 
@@ -1343,6 +1394,107 @@ let syncState = {seenNonEmpty:false, strikes:0, lastPull:0, known:[]};
 let knownIds = new Set();                           // 이 기기가 시트에서 확인한 일정 ID
 const recentWrite = new Map();                      // 방금 시트에 쓴 값 (읽기 지연으로 되돌아가는 것 방지)
 let autoSyncStarted=false, flushing=false, pulling=false, pullAgain=false;
+
+/* --- 구버전 백엔드(v1.2.0 미만) 하위 호환: 일정 색·완료를 「메모」 끝 태그로 주고받기 ----
+   · 백엔드 1.1.0(또는 1.0.x)의 「일정」 탭에는 『색상』『완료』 열이 없습니다.
+     그래서 그런 백엔드에는 색·완료를 `[[pcal:color=#d50000,done=1]]` 태그로 메모 끝에 실어 보내고,
+     읽어 올 때 그 태그를 풀어 화면·이 기기 저장소에는 깨끗한 메모만 남깁니다.
+   · 백엔드가 1.2.0 이상이면 예전처럼 『색상』『완료』 열을 씁니다(메모에 남은 옛 태그는 읽을 때 정리).
+   · 색도 완료도 없는 보통 일정에는 아무 태그도 붙이지 않습니다.
+   -------------------------------------------------------------------------------------- */
+const PCAL_TAG_RE = /\s*\[\[pcal:([^\[\]]*)\]\]\s*$/;
+let backendVersion='';          // 시트 백엔드(Code.gs) 판 — 아직 모르면 '' (태그 방식으로도 보냅니다)
+let tagSeed=[];                 // 시트에 아직 태그가 없는 색·완료 일정 → 다음 기회에 태그를 실어 올립니다
+
+function verNum(v){ const m=String(v||'').match(/(\d+)\.(\d+)\.(\d+)/); return m? (+m[1])*10000+(+m[2])*100+(+m[3]) : -1; }
+/** 시트의 『색상』『완료』 열을 쓸 수 있는 백엔드인가(1.2.0 이상). */
+function sheetHasTagFields(){ return verNum(backendVersion) >= verNum('1.2.0'); }
+/** 연결 확인(ping)·전체 읽기(load)가 알려 준 백엔드 판을 기억합니다. */
+function noteBackendVersion(v){
+  const s=String(v||'').trim();
+  if(!s) return;
+  if(s===backendVersion) return;
+  backendVersion=s; saveSyncState();
+}
+/** 메모 끝의 색·완료 태그를 떼어 냅니다. */
+function stripPcalTag(text){ return String(text==null?'':text).replace(PCAL_TAG_RE,''); }
+/** 메모 끝의 색·완료·반복 태그를 읽습니다(없으면 null). */
+function parsePcalTag(text){
+  const m=String(text==null?'':text).match(PCAL_TAG_RE);
+  if(!m) return null;
+  const out={color:'', done:false, rrule:'', exdates:[], keys:{color:false,done:false,rrule:false,exdates:false}, raw:m[1]};
+  const dec=v=>{ try{ return /%/.test(v)?decodeURIComponent(v):v; }catch(e){ return v; } };
+  m[1].split(',').forEach(kv=>{
+    const i=kv.indexOf('='); if(i<0) return;
+    const k=kv.slice(0,i).trim().toLowerCase(), v=kv.slice(i+1).trim();
+    if(k==='color'){ out.keys.color=true; out.color=/^#[0-9a-f]{6}$/i.test(v)?v.toLowerCase():''; }
+    else if(k==='done'){ out.keys.done=true; out.done=(v==='1'||v.toLowerCase()==='true'||v.toLowerCase()==='y'); }
+    else if(k==='rrule'){
+      out.keys.rrule=true;
+      const rr=rruleParse(dec(v));
+      out.rrule=rr.freq?rruleBuild({freq:rr.freq,interval:rr.interval,byday:rr.byday,endType:rr.count?'count':(rr.until?'until':'never'),until:rr.until,count:rr.count}):'';
+    }
+    else if(k==='exdates'){
+      out.keys.exdates=true;
+      out.exdates=dec(v).split(',').map(x=>x.trim()).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x));
+    }
+  });
+  return out;
+}
+/** 일정의 색·완료·반복 규칙을 메모 끝에 붙일 태그로 만듭니다(담을 게 없으면 빈 문자열). */
+function encTagVal(v){ const s=String(v==null?'':v); return /[,=]/.test(s)? encodeURIComponent(s) : s; }
+function pcalTagFor(ev, withState){
+  if(!ev) return '';
+  const parts=[];
+  if(withState!==false){
+    if(ev.color) parts.push('color='+encTagVal(ev.color));
+    if(ev.done) parts.push('done=1');
+  }
+  if(needsRuleTag(ev)) parts.push('rrule='+encTagVal(evRuleStr(ev)));
+  const ex=evExdates(ev);
+  if(ex.length) parts.push('exdates='+encTagVal(ex.join(',')));
+  return parts.length? '[[pcal:'+parts.join(',')+']]' : '';
+}
+/** 이 일정이 태그에 담아야 할 것이 있는가. */
+function hasTagPayload(ev){ return !!pcalTagFor(ev, true); }
+/** 태그를 실어 시트에 한 번 다시 올리도록 줄을 세웁니다. */
+function seedTag(id, ev, clean){
+  if(!state.url || !id || pending[id]) return;
+  if(tagSeed.length>=60) return;
+  if(!clean && !hasTagPayload(ev)) return;
+  tagSeed.push({id:String(id), clean:!!clean});
+}
+/** 이 일정을 시트로 보낼 때 쓸 색·완료 태그(백엔드가 새것이면 색·완료는 열로 갑니다). */
+function pcalTagForSheet(ev){ return pcalTagFor(ev, !sheetHasTagFields()); }
+/** 시트로 보낼 모양으로 바꿉니다 — 구버전이면 색·완료를 메모 태그에 실어 보냅니다. */
+function evForSheet(ev){
+  if(!ev) return ev;
+  const copy=Object.assign({},ev);
+  const memo=stripPcalTag(copy.memo);
+  const tag=pcalTagForSheet(copy);
+  copy.memo=tag? (memo? memo+'\n'+tag : tag) : memo;
+  return copy;
+}
+function eventsForSheet(list){ return (list||[]).map(evForSheet); }
+/** 시트에서 읽은 일정 — 메모에 실려 온 색·완료·반복 태그를 풀고, 화면에 쓸 메모는 깨끗하게 만듭니다. */
+function evFromSheet(r){
+  if(!r || typeof r!=='object') return r;
+  const out=Object.assign({},r);
+  const tag=parsePcalTag(out.memo);
+  out.memo=stripPcalTag(out.memo);
+  /* 색상·완료 열이 없는 백엔드에서 온 값이면 태그가 유일한 근거입니다(태그도 없으면 색·완료 없음).
+     새 백엔드(1.2.0)인데 열이 비어 있으면 undefined 로 두어 이 기기의 값을 지키게 합니다. */
+  if(out.color===undefined && !sheetHasTagFields()) out.color=tag?(tag.color||''):'';
+  if(out.done===undefined  && !sheetHasTagFields()) out.done=tag?!!tag.done:false;
+  /* 반복 규칙·건너뛴 날짜는 어떤 백엔드에서도 태그로만 오갑니다(반복 열은 매주/매월 같은 큰 값). */
+  if(tag && tag.keys.rrule) out.rrule=tag.rrule;
+  if(!out.rrule) out.rrule='';
+  if(tag && tag.keys.exdates) out.exdates=tag.exdates.slice();
+  else if(!Array.isArray(out.exdates)) out.exdates=[];
+  /* 화면·저장소·시트로 되돌아가는 값에 표식이 섞이지 않게 감춥니다. */
+  if(tag) Object.defineProperty(out,'__tag',{value:tag, enumerable:false, configurable:true});
+  return out;
+}
 
 /* --- 캘린더(목록·이름·색상·표시여부) 동기화 -------------------------------
    일정과 달리 캘린더는 개수가 적어 '목록 전체'를 한 번에 올립니다.
@@ -1474,6 +1626,7 @@ function loadSyncStore(){
       syncState.seenNonEmpty=!!s.seenNonEmpty;
       syncState.strikes=Number(s.strikes)||0;
       syncState.lastPull=Number(s.lastPull)||0;
+      backendVersion=String(s.backend||'');
       knownIds=new Set(Array.isArray(s.known)?s.known.map(String):[]);
     }
   }catch(e){}
@@ -1483,6 +1636,7 @@ function savePending(){ try{ localStorage.setItem(SYNC_LS.pending, JSON.stringif
 function saveSyncState(){
   try{
     syncState.known=Array.from(knownIds);
+    syncState.backend=backendVersion;
     localStorage.setItem(SYNC_LS.state, JSON.stringify(syncState));
   }catch(e){}
 }
@@ -1512,7 +1666,7 @@ async function flushPending(){
     while(Object.keys(pending).length && guard++<500){      // 올리는 중에 새로 생긴 변경도 이어서 올립니다
       const id=Object.keys(pending)[0];
       const item=pending[id];
-      const r = item==='delete' ? await api('deleteEvent',{id:id}) : await api('saveEvent',{event:item});
+      const r = item==='delete' ? await api('deleteEvent',{id:id}) : await api('saveEvent',{event:evForSheet(item)});
       if(!r || r.ok===false) throw new Error((r&&r.error)||'저장에 실패했습니다.');
       if(item!=='delete' && item && item.updatedAt) recentWrite.set(String(id), String(item.updatedAt));
       else recentWrite.delete(String(id));
@@ -1529,12 +1683,15 @@ async function flushPending(){
 }
 
 function sigOf(list){
-  return list.map(e=>String(e.id)+'@'+String(e.updatedAt||'')).sort().join('|');
+  /* 수정시각이 같아도 색·완료·반복 규칙·메모가 바뀌면 화면을 다시 그려야 합니다. */
+  return list.map(e=>[String(e.id), String(e.updatedAt||''), String(e.color||''), e.done?'1':'0',
+    String(e.rrule||''), (Array.isArray(e.exdates)?e.exdates.join(','):''), String(e.memo||'')].join('@')).sort().join('|');
 }
 
 /** 시트에서 읽은 내용을 이 브라우저에 반영합니다. */
 function applyRemote(d){
-  const remote=Array.isArray(d.events)?d.events:[];
+  if(d && d.version) noteBackendVersion(d.version);
+  const remote=(Array.isArray(d.events)?d.events:[]).map(evFromSheet);
   const remoteEmpty=remote.length===0;
   const calsChanged=applyRemoteCals(d.calendars);
   const kidsChanged=kApplyRemote(d.kids);
@@ -1563,12 +1720,36 @@ function applyRemote(d){
     }
     const local=localById.get(id), rw=recentWrite.get(id);
     if(rw!==undefined && local && String(local.updatedAt||'')===rw && String(r.updatedAt||'')<rw){ out.push(local); return; }
-    /* 구버전 백엔드(색상·완료 열 없음)에서 읽은 값이 이 기기의 개별 색·완료를 지우지 않게 보존합니다. */
-    if(local && (r.color===undefined || r.done===undefined)){
-      const merged=Object.assign({},r);
-      if(merged.color===undefined) merged.color=local.color||'';
-      if(merged.done===undefined) merged.done=!!local.done;
-      out.push(merged); return;
+    /* 구버전 백엔드(색상·완료 열 없음)에서는 색·완료가 「메모」 끝 태그로만 오갑니다. */
+    if(local){
+      const remoteNewer=String(r.updatedAt||'')>String(local.updatedAt||'');
+      if(sheetHasTagFields()){
+        if(!remoteNewer && r.__tag && (r.__tag.keys.color||r.__tag.keys.done) && !(r.__tag.keys.rrule||r.__tag.keys.exdates)){
+          /* 백엔드를 1.2.0으로 올린 뒤 메모에 남은 옛 색·완료 태그 → 한 번 깨끗하게 다시 씁니다 */
+          seedTag(id, r, true);
+        }
+        if(!r.__tag && !remoteNewer){
+          /* 반복 규칙·건너뛴 날짜는 어느 백엔드든 메모 태그로만 오갑니다(반복 열은 매주/매월 같은 큰 값). */
+          const merged=Object.assign({},r,{rrule:evRuleStr(local), exdates:evExdates(local)});
+          if(merged.color===undefined) merged.color=local.color||'';
+          if(merged.done===undefined) merged.done=!!local.done;
+          if(merged.rrule||merged.exdates.length) seedTag(id, merged, false);
+          out.push(merged); return;
+        }
+        if(r.color===undefined || r.done===undefined){
+          /* 새 백엔드인데 시트에 그 열이 아직 없는 줄(예전에 만든 시트) → 이 기기의 색·완료를 지킵니다. */
+          const merged=Object.assign({},r);
+          if(merged.color===undefined) merged.color=local.color||'';
+          if(merged.done===undefined) merged.done=!!local.done;
+          out.push(merged); return;
+        }
+      } else if(!r.__tag && !remoteNewer){
+        /* 시트에 아직 태그가 없는 일정(이 기능 전에 저장된 것) → 이 기기의 색·완료·반복 규칙을 지키고,
+           같은 값을 태그로 실어 시트에도 올려 둡니다(그래야 다른 기기에도 따라갑니다). */
+        const merged=Object.assign({},r,{color:local.color||'', done:!!local.done, rrule:evRuleStr(local), exdates:evExdates(local)});
+        if(hasTagPayload(merged)) seedTag(id, merged, false);
+        out.push(merged); return;
+      }
     }
     out.push(r);
   });
@@ -1576,6 +1757,20 @@ function applyRemote(d){
     const item=pending[id];
     if(item && item!=='delete' && !remoteIds.has(String(id))) out.push(item);   // 아직 못 올린 새 일정
   });
+  /* 색·완료가 시트에 아직 실려 있지 않은 일정 → 태그(또는 깨끗한 메모)로 한 번 올려 둡니다. */
+  if(tagSeed.length && state.url){
+    const byId=new Map(out.map(e=>[String(e.id),e]));
+    let queued=false;
+    tagSeed.forEach(s=>{
+      const id=String(s.id), ev=byId.get(id);
+      if(!ev || pending[id]) return;
+      if(!s.clean && !hasTagPayload(ev)) return;   // 실어 올릴 색·완료·반복 규칙이 없는 일정은 그냥 둡니다
+      pending[id]=JSON.parse(JSON.stringify(ev));
+      queued=true;
+    });
+    tagSeed=[];
+    if(queued){ savePending(); setTimeout(()=>{ flushPending(); },0); }
+  }
   state.events.forEach(ev=>{
     const id=String(ev.id);
     if(remoteIds.has(id) || pending[id]) return;
@@ -1646,7 +1841,7 @@ function startAutoSync(){
   window.addEventListener('online',kick);
   setInterval(()=>{
     if(!state.url || document.visibilityState!=='visible') return;
-    if(!$('#modal').hidden || !$('#settings').hidden || !$('#calModal').hidden || !$('#qa').hidden) return;
+    if(!$('#modal').hidden || !$('#settings').hidden || !$('#calModal').hidden || !$('#qa').hidden || !$('#scope').hidden || !$('#kModal').hidden) return;
     flushCals().then(()=>flushPending()).then(()=>kFlushProfile()).then(()=>kFlush()).then(()=>refreshFromRemote({quiet:true}));
   }, 60000);
 }
@@ -1699,6 +1894,160 @@ function setStatus(t){
   b.textContent=t; b.className='badge'+(t==='연결됨'?' g':'');
 }
 
+/* ------------------------------------------------------------ 반복 규칙 (RRULE) */
+const RR_FREQ={DAILY:'매일',WEEKLY:'매주',MONTHLY:'매월',YEARLY:'매년'};
+const RR_UNIT={DAILY:'일',WEEKLY:'주',MONTHLY:'개월',YEARLY:'년'};
+const BYDAY=['SU','MO','TU','WE','TH','FR','SA'];
+function rruleParse(str){
+  const r={freq:'',interval:1,byday:[],until:'',count:0};
+  if(!str) return r;
+  String(str).toUpperCase().split(';').forEach(part=>{
+    const kv=part.split('='), k=kv[0], v=kv[1]||'';
+    if(k==='FREQ') r.freq=v;
+    else if(k==='INTERVAL') r.interval=Math.max(1,parseInt(v,10)||1);
+    else if(k==='BYDAY') r.byday=v.split(',').filter(x=>BYDAY.indexOf(x)>=0);
+    else if(k==='UNTIL') r.until=v.replace(/[^0-9]/g,'').slice(0,8);
+    else if(k==='COUNT') r.count=Math.max(1,parseInt(v,10)||0);
+  });
+  if(['DAILY','WEEKLY','MONTHLY','YEARLY'].indexOf(r.freq)<0) r.freq='';
+  return r;
+}
+function rruleBuild(rep){
+  if(!rep||!rep.freq) return '';
+  const parts=['FREQ='+rep.freq];
+  if((rep.interval||1)>1) parts.push('INTERVAL='+rep.interval);
+  if(rep.freq==='WEEKLY'&&rep.byday&&rep.byday.length) parts.push('BYDAY='+BYDAY.filter(d=>rep.byday.indexOf(d)>=0).join(','));
+  if(rep.endType==='until'&&rep.until) parts.push('UNTIL='+String(rep.until).replace(/-/g,'').slice(0,8));
+  if(rep.endType==='count'&&rep.count>0) parts.push('COUNT='+Math.round(rep.count));
+  return parts.join(';');
+}
+/** 일정의 반복 규칙을 표준 RRULE 문자열로. (간단한 매주·매월은 반복 열으로도 충분하지만, 항상 적어 둡니다) */
+function evRuleStr(ev){
+  const r=evRule(ev);
+  if(!r.freq) return '';
+  return rruleBuild({freq:r.freq, interval:r.interval||1, byday:(r.byday||[]).slice(),
+    endType:r.count?'count':(r.until?'until':'never'), until:r.until||'', count:r.count||0});
+}
+/** 반복 열(repeat)만으로는 표현할 수 없어 메모 태그에 규칙을 실어야 하는가. */
+function needsRuleTag(ev){
+  const r=evRule(ev);
+  if(!r.freq) return false;
+  return ((r.interval||1)>1) || (r.byday||[]).length>0 || !!r.until || !!r.count;
+}
+/** 일정의 반복 규칙 — rrule(새 형식)이 없으면 예전 repeat 글자를 규칙으로 봅니다. */
+function evRule(ev){
+  if(!ev) return rruleParse('');
+  const base={daily:'DAILY',weekly:'WEEKLY',monthly:'MONTHLY',yearly:'YEARLY'}[ev.repeat||''];
+  const r=rruleParse(ev.rrule||(base?'FREQ='+base:''));
+  if(!r.freq&&base) r.freq=base;
+  if(!r.freq&&ev.repeat==='weekdays') r.freq='WEEKLY';
+  return r;
+}
+function evIsRepeating(ev){ return !!evRule(ev).freq; }
+function evExdates(ev){ return Array.isArray(ev&&ev.exdates)?(ev.exdates||[]).map(String):[]; }
+function evUntilDate(rule){ if(!rule||!rule.until) return null; const u=rule.until; return parseYMD(u.slice(0,4)+'-'+u.slice(4,6)+'-'+u.slice(6,8)); }
+/** 규칙에 맞는 발생 시작(날) 목록 — [from, to) 구간. COUNT 는 시리즈 시작부터 세어 멈춥니다. */
+function ruleDates(rule, baseDay, from, to){
+  const out=[];
+  if(!rule.freq) return (baseDay>=from&&baseDay<to)?[new Date(baseDay)]:[];
+  const iv=Math.max(1,rule.interval||1);
+  const u=evUntilDate(rule);
+  const end=u?addDays(startOfDay(u),1):to;
+  const hard=end<to?end:to;
+  const maxN=rule.count||0;
+  const days=(rule.byday&&rule.byday.length)?BYDAY.filter(d=>rule.byday.indexOf(d)>=0):[BYDAY[baseDay.getDay()]];
+  let n=0;
+  if(rule.freq==='DAILY'){
+    let i=0;
+    if(!maxN&&from>baseDay) i=Math.max(0,Math.floor(daysBetween(baseDay,from)/iv)-1);
+    for(let g=0;g<8000;g++,i++){
+      const d=addDays(baseDay,i*iv);
+      if(d>=hard) break;
+      if(maxN){ if(n>=maxN) break; n++; }
+      if(d>=from) out.push(d);
+      if(out.length>=800) break;
+    }
+  } else if(rule.freq==='WEEKLY'){
+    let wk=startOfWeek(baseDay);
+    if(!maxN&&from>wk){
+      const jump=Math.floor(daysBetween(wk,from)/(7*iv))-1;
+      if(jump>0) wk=addDays(wk,7*iv*jump);
+    }
+    const wds=days.map(k=>BYDAY.indexOf(k)).filter(i=>i>=0).sort((a,b)=>a-b);
+    for(let j=0;j<3000;j++){
+      const ws=addDays(wk,7*iv*j);
+      if(ws>=hard) break;
+      for(let q=0;q<wds.length;q++){
+        const d=addDays(ws,wds[q]);
+        if(d<baseDay) continue;
+        if(maxN){ if(n>=maxN) break; n++; }
+        if(d>=hard) continue;
+        if(d>=from) out.push(d);
+      }
+      if(maxN&&n>=maxN) break;
+      if(out.length>=800) break;
+    }
+  } else if(rule.freq==='MONTHLY'){
+    let i=0;
+    if(!maxN&&from>baseDay){
+      const mo=(from.getFullYear()-baseDay.getFullYear())*12+(from.getMonth()-baseDay.getMonth());
+      i=Math.max(0,Math.floor((mo-1)/iv));
+    }
+    for(let g=0;g<2400;g++,i++){
+      const y=baseDay.getFullYear(), m=baseDay.getMonth()+i*iv;
+      const mStart=new Date(y,m,1);
+      if(mStart>=hard) break;
+      const dim=new Date(y,m+1,0).getDate();
+      if(baseDay.getDate()>dim) continue;      // 그 달에 없는 날(31일 등)은 건너뜁니다
+      const d=new Date(y,m,baseDay.getDate());
+      if(maxN){ if(n>=maxN) break; n++; }
+      if(d>=from) out.push(d);
+      if(out.length>=800) break;
+    }
+  } else {
+    let i=0;
+    if(!maxN&&from>baseDay) i=Math.max(0,(from.getFullYear()-baseDay.getFullYear())-1);
+    for(let g=0;g<400;g++,i++){
+      const y=baseDay.getFullYear()+i*iv;
+      const d=new Date(y,baseDay.getMonth(),baseDay.getDate());
+      if(d>=hard) break;
+      if(d.getMonth()!==baseDay.getMonth()) continue;   // 2월 29일 등
+      if(maxN){ if(n>=maxN) break; n++; }
+      if(d>=from) out.push(d);
+      if(out.length>=800) break;
+    }
+  }
+  return out;
+}
+/** 반복 규칙을 사람이 읽는 말로. */
+function ruleTextOfRule(r){
+  if(!r||!r.freq) return '';
+  const iv=Math.max(1,r.interval||1);
+  let t=iv>1? ('매 '+iv+RR_UNIT[r.freq]+'마다') : RR_FREQ[r.freq];
+  if(r.freq==='WEEKLY'){
+    const days=BYDAY.filter(d=>(r.byday||[]).indexOf(d)>=0);
+    if(days.length===5&&days.join(',')==='MO,TU,WE,TH,FR') t='평일(월~금)';
+    else if(days.length) t+=' '+days.map(d=>WD[BYDAY.indexOf(d)]).join('·');
+  }
+  if(r.until){ const u=String(r.until).replace(/[^0-9]/g,'').slice(0,8); t+=' · '+u.slice(0,4)+'-'+u.slice(4,6)+'-'+u.slice(6,8)+'까지'; }
+  if(r.count&&!r.until) t+=' · '+r.count+'회';
+  return t;
+}
+function ruleText(ev){ return ruleTextOfRule(evRule(ev)); }
+/** 시리즈의 첫 발생 날짜(YYYY-MM-DD). */
+function firstOccDate(ev){
+  const b=ev&&ev.allDay?parseYMD(ev.start):parseDT(ev&&ev.start);
+  if(!b||isNaN(b.getTime())) return '';
+  const day0=startOfDay(b), rule=evRule(ev);
+  if(!rule.freq) return YMD(day0);
+  const d=ruleDates(rule,day0,day0,addDays(day0,400));
+  return d.length?YMD(d[0]):YMD(day0);
+}
+/** 규칙을 lastDay(YYYY-MM-DD)까지만 남기도록 UNTIL 을 달아 돌려줍니다. */
+function cutRule(rule,lastDay){
+  return rruleBuild({freq:rule.freq, interval:rule.interval||1, byday:(rule.byday||[]).slice(), endType:'until', until:String(lastDay).replace(/-/g,''), count:0});
+}
+
 /* ------------------------------------------------------------ 반복 펼치기 */
 function occList(rangeStart, rangeEnd, opts){
   opts=opts||{};
@@ -1713,26 +2062,19 @@ function occList(rangeStart, rangeEnd, opts){
     if(isNaN(bStart.getTime())) return;
     const spanDays = allDay? Math.max(1, daysBetween(bStart,bEnd)+1) : 1;
     const durMin = allDay? 0 : Math.max(10, Math.round((bEnd-bStart)/60000));
-    const repeat=ev.repeat||'none';
-    const starts=[];
-    if(repeat==='none'){ starts.push(new Date(bStart)); }
-    else {
-      let k0=0;
-      if(repeat==='weekly') k0=Math.max(0, Math.floor(daysBetween(bStart,rs)/7)-1);
-      else if(repeat==='monthly') k0=Math.max(0, (rs.getFullYear()-bStart.getFullYear())*12+(rs.getMonth()-bStart.getMonth())-1);
-      else k0=Math.max(0, rs.getFullYear()-bStart.getFullYear()-1);
-      for(let k=k0;k<k0+600;k++){
-        const st = repeat==='weekly'? addDays(bStart,7*k) : addMonths(bStart, repeat==='monthly'?k:12*k);
-        if(st>=re) break;
-        starts.push(st);
-      }
-    }
-    starts.forEach(st=>{
-      const s=allDay?startOfDay(st):st;
-      const end=allDay? addDays(startOfDay(st),spanDays-1) : new Date(st.getTime()+durMin*60000);
+    const rule=evRule(ev);
+    const day0=startOfDay(bStart), tod=bStart.getTime()-day0.getTime();
+    const ex=evExdates(ev);
+    const from=allDay? addDays(rs,1-spanDays) : rs;
+    ruleDates(rule, day0, from, re).forEach(dd=>{
+      const occDay=startOfDay(dd), occDate=YMD(occDay);
+      if(ex.indexOf(occDate)>=0) return;
+      const st=new Date(occDay.getTime()+tod);
+      const s=allDay?occDay:st;
+      const end=allDay? addDays(occDay,spanDays-1) : new Date(st.getTime()+durMin*60000);
       const endExcl=allDay? addDays(end,1) : end;
       if(endExcl<=rs || s>=re) return;
-      out.push({key:ev.id+'@'+YMD(s), ev:ev, cal:cal, allDay:allDay, start:s, end:end, endExcl:endExcl, spanDays:spanDays, durMin:durMin});
+      out.push({key:ev.id+'@'+occDate, ev:ev, cal:cal, allDay:allDay, start:s, end:end, endExcl:endExcl, spanDays:spanDays, durMin:durMin, occDate:occDate});
     });
   });
   return out;
@@ -2068,7 +2410,7 @@ function renderSchedule(){
     const color=evColor(o.ev,o.cal);
     const time=o.allDay?'종일':fmtTime(o.start);
     const meta=[o.ev.location, (o.cal&&o.cal.name)||''].filter(Boolean).join(' · ');
-    const badges=(o.ev.done?'<span class="badge done">✓ 완료</span>':'')+(o.ev.repeat&&o.ev.repeat!=='none'?`<span class="badge">🔁 ${repeatLabel(o.ev.repeat)}</span>`:'')+(o.ev.googleId?'<span class="badge g">✓ 구글 전송됨</span>':'');
+    const badges=(o.ev.done?'<span class="badge done">✓ 완료</span>':'')+(evIsRepeating(o.ev)?`<span class="badge">🔁 ${esc(ruleText(o.ev))}</span>`:'')+(o.ev.googleId?'<span class="badge g">✓ 구글 전송됨</span>':'');
     html+=`<div class="sch-item${o.ev.done?' done':''}" data-key="${o.key}"><i class="dot" style="--color:${color};background:${color}"></i><div class="si-time">${time}</div><div class="si-main"><div class="si-t">${esc(o.ev.title||'(제목 없음)')}${badges}</div>${meta?`<div class="si-m">${esc(meta)}</div>`:''}</div></div>`;
     const next=occs[occs.indexOf(o)+1];
     if(!next || YMD(next.start)!==k) html+='</div></div>';
@@ -2197,7 +2539,8 @@ function openPop(key,x,y){
   let body='';
   body+=line(ICO.clock,esc(timeText(o)));
   if(ev.done) body+=line('✓','완료한 일정','흑색으로 표시');
-  if(ev.repeat&&ev.repeat!=='none') body+=line(ICO.repeat,repeatLabel(ev.repeat),'반복 일정');
+  const rtxt=ruleText(ev);
+  if(rtxt) body+=line(ICO.repeat,esc(rtxt),'반복 일정');
   body+=line(ICO.cal,esc(cal.name),'캘린더');
   if(ev.location) body+=line(ICO.pin,esc(ev.location));
   if(ev.memo) body+=line(ICO.note,esc(ev.memo));
@@ -2266,6 +2609,119 @@ function renderGoogleStatus(ev){
     box.innerHTML='<span>📤 <b>구글 캘린더로 보내기</b> — 이 일정만 내 구글 캘린더(기본)에 복사해 보관합니다. 일정 색과 완료(흑색)도 함께 옮겨요.</span>';
   }
 }
+/* ------------------------------------------------------------ 반복 편집 패널 (개인 캘린더) */
+function shiftYMD(str,delta){
+  const d=parseDT(str); if(!d||isNaN(d.getTime())) return str;
+  d.setDate(d.getDate()+delta);
+  return String(str).indexOf('T')>=0 ? YMD(d)+'T'+HM(d) : YMD(d);
+}
+function mRepPresetOf(rule){
+  if(!rule||!rule.freq) return 'none';
+  const iv=rule.interval||1, hasEnd=!!(rule.until||rule.count);
+  if(iv===1&&!hasEnd){
+    if(rule.freq==='DAILY') return 'daily';
+    if(rule.freq==='MONTHLY') return 'monthly';
+    if(rule.freq==='YEARLY') return 'yearly';
+    if(rule.freq==='WEEKLY'){
+      const days=BYDAY.filter(d=>(rule.byday||[]).indexOf(d)>=0);
+      if(!days.length) return 'weekly';
+      if(days.join(',')==='MO,TU,WE,TH,FR') return 'weekdays';
+    }
+  }
+  return 'custom';
+}
+function mRepBaseDate(){ return (editing&&editing.occDate)||YMD(state.cursor); }
+function mRepFillPanel(rule){
+  const r=rule||{};
+  const freq=r.freq||'WEEKLY';
+  $('#mRepFreq').value=freq;
+  $('#mRepInterval').value=r.interval||1;
+  const base=parseYMD(mRepBaseDate());
+  const days=(r.byday&&r.byday.length)?r.byday:[BYDAY[isNaN(base.getTime())?1:base.getDay()]];
+  $('#mDow').innerHTML=[0,1,2,3,4,5,6].map(i=>
+    `<button type="button" class="kchip ${days.indexOf(BYDAY[i])>=0?'on':''}" data-kd="${BYDAY[i]}" aria-pressed="${days.indexOf(BYDAY[i])>=0}">${WD[i]}</button>`).join('');
+  $('#mEndType').value=r.count?'count':(r.until?'until':'never');
+  $('#mUntil').value=r.until?r.until.slice(0,4)+'-'+r.until.slice(4,6)+'-'+r.until.slice(6,8):YMD(addDays(base,90));
+  $('#mCount').value=r.count||10;
+}
+function mRepReadPanel(){
+  const freq=$('#mRepFreq').value;
+  return {
+    freq:freq,
+    interval:Math.max(1,parseInt($('#mRepInterval').value,10)||1),
+    byday:(freq==='WEEKLY')?$$('#mDow [data-kd].on').map(b=>b.dataset.kd):[],
+    endType:$('#mEndType').value,
+    until:$('#mUntil').value||'',
+    count:Math.max(1,parseInt($('#mCount').value,10)||0)
+  };
+}
+function mRepSync(){
+  const v=$('#mRepeat').value;
+  $('#mRepPanel').hidden=(v==='none');
+  if(v==='none') return;
+  const r=mRepReadPanel();
+  $('#mDowWrap').hidden=(r.freq!=='WEEKLY');
+  $('#mRepUnit').textContent=RR_UNIT[r.freq]+'마다';
+  $('#mUntil').hidden=($('#mEndType').value!=='until');
+  $('#mCount').hidden=($('#mEndType').value!=='count');
+  $('#mCountUnit').hidden=($('#mEndType').value!=='count');
+  if(!$('#mUntil').value) $('#mUntil').value=YMD(addDays(parseYMD(mRepBaseDate()),90));
+  const disp={freq:r.freq, interval:r.interval, byday:r.byday,
+    until:(r.endType==='until')?String(r.until||''):'',
+    count:(r.endType==='count')?r.count:0};
+  $('#mRepeatHint').textContent='반복: '+ruleTextOfRule(disp)+'  ·  '+rruleBuild(r);
+}
+/* 반복 일정 수정·삭제 범위(구글 캘린더와 같음) */
+function applyEditScope(series, form, occDate, scope){
+  const now=new Date().toISOString();
+  const first=firstOccDate(series);
+  if(scope==='all' || (scope==='following' && occDate===first)){
+    form.id=series.id; form.updatedAt=now;
+    upsertEvent(form); return;
+  }
+  const base=JSON.parse(JSON.stringify(series));
+  base.updatedAt=now;
+  if(scope==='one'){
+    const ex=evExdates(base); if(ex.indexOf(occDate)<0) ex.push(occDate);
+    base.exdates=ex;
+    upsertEvent(base);
+    form.id=uid(); form.repeat='none'; form.rrule=''; form.exdates=[];
+    form.googleId=''; form.googleSentAt=''; form.updatedAt=now;
+    upsertEvent(form);
+  } else {
+    const rule=evRule(base);
+    base.rrule=cutRule(rule,YMD(addDays(parseYMD(occDate),-1)));
+    base.repeat=(rule.freq==='DAILY'?'daily':rule.freq==='WEEKLY'?'weekly':rule.freq==='MONTHLY'?'monthly':'yearly');
+    base.exdates=evExdates(base).filter(d=>d<occDate);
+    upsertEvent(base);
+    form.id=uid(); form.googleId=''; form.googleSentAt=''; form.updatedAt=now;
+    form.exdates=evExdates(form).filter(d=>d>=occDate);
+    upsertEvent(form);
+  }
+}
+function applyDeleteScope(series, occDate, scope){
+  const now=new Date().toISOString();
+  const first=firstOccDate(series);
+  closePop(); closeModal();
+  if(scope==='all' || (scope==='following' && occDate===first)){
+    state.events=state.events.filter(x=>x.id!==series.id);
+    persistLocal(); renderAll(); queueDelete(series.id);
+    return;
+  }
+  const base=JSON.parse(JSON.stringify(series));
+  base.updatedAt=now;
+  if(scope==='one'){
+    const ex=evExdates(base); if(ex.indexOf(occDate)<0) ex.push(occDate);
+    base.exdates=ex;
+  } else {
+    const rule=evRule(base);
+    base.rrule=cutRule(rule,YMD(addDays(parseYMD(occDate),-1)));
+    base.repeat=(rule.freq==='DAILY'?'daily':rule.freq==='WEEKLY'?'weekly':rule.freq==='MONTHLY'?'monthly':'yearly');
+    base.exdates=evExdates(base).filter(d=>d<occDate);
+  }
+  upsertEvent(base);
+}
+
 function openModal(opts){
   opts=opts||{};
   let ev;
@@ -2277,7 +2733,15 @@ function openModal(opts){
     ev={id:'',title:'',start:date+'T'+st,end:date+'T'+en,allDay:!!opts.allDay,repeat:'none',calId:opts.calId||firstCalId(),location:'',memo:'',color:'',done:false,googleId:'',googleSentAt:''};
     if(opts.allDay){ ev.start=date; ev.end=date; }
   }
-  editing={ev:ev,isNew:!opts.event};
+  /* 반복 일정의 특정 회차를 열면 그 날짜·시간으로 보여 줍니다. */
+  let occDate=opts.occDate||'';
+  if(opts.event && occDate){
+    const os=ev.allDay?parseYMD(ev.start):parseDT(ev.start);
+    const delta=daysBetween(startOfDay(os), parseYMD(occDate));
+    if(!isNaN(os.getTime()) && delta!==0){ ev.start=shiftYMD(ev.start,delta); ev.end=shiftYMD(ev.end||ev.start,delta); }
+  }
+  if(!occDate) occDate=YMD(ev.allDay?parseYMD(ev.start):parseDT(ev.start));
+  editing={ev:ev,isNew:!opts.event,occDate:occDate};
   $('#mHead').textContent=editing.isNew?'새 일정':'일정 수정';
   $('#mTitle').value=ev.title||'';
   $('#mAllDay').checked=!!ev.allDay;
@@ -2285,8 +2749,10 @@ function openModal(opts){
   const e=ev.allDay?parseYMD(ev.end||ev.start):parseDT(ev.end||ev.start);
   $('#mStartDate').value=YMD(s); $('#mStartTime').value=HM(s);
   $('#mEndDate').value=YMD(e); $('#mEndTime').value=HM(e);
-  $('#mRepeat').value=ev.repeat||'none';
-  $('#mRepeatHint').hidden=(ev.repeat||'none')==='none';
+  const rule=evRule(ev);
+  $('#mRepeat').value=mRepPresetOf(rule);
+  mRepFillPanel(rule);
+  mRepSync();
   $('#mLocation').value=ev.location||'';
   $('#mMemo').value=ev.memo||'';
   renderCalPicker(ev.calId);
@@ -2305,7 +2771,14 @@ function collectForm(){
   const ev=Object.assign({},editing.ev);
   ev.title=$('#mTitle').value.trim()||'(제목 없음)';
   ev.allDay=$('#mAllDay').checked;
-  ev.repeat=$('#mRepeat').value;
+  const repV=$('#mRepeat').value;
+  if(repV==='none'){ ev.repeat='none'; ev.rrule=''; }
+  else {
+    const r=mRepReadPanel();
+    ev.rrule=rruleBuild(r);
+    ev.repeat=(r.freq==='DAILY'?'daily':r.freq==='WEEKLY'?'weekly':r.freq==='MONTHLY'?'monthly':'yearly');
+  }
+  ev.exdates=evExdates(ev);
   ev.calId=editing.ev.calId||firstCalId();
   ev.color=editing.ev.color||'';
   ev.done=!!$('#mDone').checked;
@@ -2329,6 +2802,20 @@ function saveModal(){
   if(!editing) return;
   const ev=collectForm();
   const wasNew=editing.isNew;
+  const series=wasNew?null:state.events.find(x=>x.id===editing.ev.id);
+  const occDate=editing.occDate;
+  if(series && evIsRepeating(series) && occDate && occDate!==firstOccDate(series)){
+    scopeDialog({
+      title:'반복 일정 수정',
+      body:'"'+(series.title||'(제목 없음)')+'" '+occDate+' 회차를 고쳤습니다.\n어느 범위에 적용할까요?'
+    }).then(scope=>{
+      if(!scope) return;
+      applyEditScope(series, ev, occDate, scope);
+      closeModal();
+      toast(scope==='one'?'이 일정만 저장했어요':scope==='following'?'이 일정부터 저장했어요':'반복 일정 전체를 저장했어요');
+    });
+    return;
+  }
   upsertEvent(ev);
   closeModal();
   toast(wasNew?'일정을 추가했어요':'일정을 저장했어요');
@@ -2340,10 +2827,21 @@ function upsertEvent(ev){
   renderAll();
   queueEvent(ev);
 }
-function deleteEvent(ev){
+function deleteEvent(ev, occDate){
+  const series=state.events.find(x=>x.id===ev.id);
+  if(series && evIsRepeating(series) && occDate && occDate!==firstOccDate(series)){
+    return scopeDialog({
+      title:'반복 일정 삭제',
+      body:'"'+(series.title||'(제목 없음)')+'" '+occDate+' 회차를 지웁니다.\n어느 범위를 지울까요?'
+    }).then(scope=>{
+      if(!scope) return;
+      applyDeleteScope(series, occDate, scope);
+      toast(scope==='one'?'이 일정만 지웠어요':scope==='following'?'이 일정부터 지웠어요':'반복 일정을 모두 지웠어요');
+    });
+  }
   return confirmDialog({
     title:'일정 삭제',
-    body:`"${ev.title||'(제목 없음)'}" 일정을 삭제할까요?`+((ev.repeat&&ev.repeat!=='none')?'\n\n반복 일정이라 시리즈 전체가 삭제됩니다.':''),
+    body:`"${ev.title||'(제목 없음)'}" 일정을 삭제할까요?`+((series&&evIsRepeating(series))?'\n\n반복 일정이라 시리즈 전체가 삭제됩니다.':'')+(Array.isArray(ev.exdates)&&ev.exdates.length?`\n(건너뛴 회차 ${ev.exdates.length}개도 함께 사라집니다.)`:''),
     okText:'삭제', danger:true
   }).then(ok=>{
     if(!ok) return;
@@ -2510,7 +3008,7 @@ function moveOccurrence(o,delta){
     toast(`${Math.abs(delta)}일 ${delta>0?'뒤로':'앞으로'} 옮겼어요`);
   };
   if(ev.repeat && ev.repeat!=='none'){
-    confirmDialog({title:'반복 일정 옮기기',body:`반복 일정(${repeatLabel(ev.repeat)})이라 날짜를 옮기면 시리즈 전체가 ${Math.abs(delta)}일 ${delta>0?'뒤로':'앞으로'} 이동합니다.\n계속할까요?`,okText:'옮기기'}).then(ok=>{ if(ok) apply(); });
+    confirmDialog({title:'반복 일정 옮기기',body:`반복 일정(${ruleText(ev)})이라 날짜를 옮기면 시리즈 전체가 ${Math.abs(delta)}일 ${delta>0?'뒤로':'앞으로'} 이동합니다.\n계속할까요?`,okText:'옮기기'}).then(ok=>{ if(ok) apply(); });
   } else apply();
 }
 function bindMonthDrag(){
@@ -2632,6 +3130,29 @@ function confirmDialog(o){
     window.__cbDone=done;
   });
 }
+/* 반복 일정을 '이 일정만 / 이 일정 및 향후 / 모든 일정' 중에서 고르는 창 */
+function scopeDialog(o){
+  return new Promise(resolve=>{
+    $('#scopeTitle').textContent=o.title||'반복 일정';
+    $('#scopeBody').textContent=o.body||'';
+    $('#scopeFoot').innerHTML='<button class="btn" data-scope="one">이 일정만</button>'
+      +'<button class="btn" data-scope="following">이 일정 및 향후 일정</button>'
+      +'<button class="btn" data-scope="all">모든 일정</button>'
+      +'<span class="spacer"></span><button class="btn text" data-scope="cancel">취소</button>';
+    show($('#scope'));
+    const done=v=>{
+      hide($('#scope'));
+      $('#scopeFoot').onclick=null;
+      window.__scopeDone=null;
+      resolve(v);
+    };
+    $('#scopeFoot').onclick=e=>{
+      const b=e.target.closest('[data-scope]'); if(!b) return;
+      done(b.dataset.scope==='cancel'?null:b.dataset.scope);
+    };
+    window.__scopeDone=done;
+  });
+}
 function toast(msg){
   const t=$('#toast');
   t.textContent=msg; t.classList.add('show');
@@ -2657,7 +3178,7 @@ function setMsg(s){ const m=$('#setMsg'); if(m) m.textContent=s||''; }
 function openSettings(){
   $('#setUrl').value=state.url; setStatus(state.url?'연결됨':'로컬');
   $('#setWeekStart').value=String(PREFS.weekStart);
-  $('#setVersion').textContent='내 캘린더 v1.3.0 · 일정 '+state.events.length+'개 · 캘린더 '+state.cals.length+'개 · 육아 일정 '+kidData.events.length+'개';
+  $('#setVersion').textContent='내 캘린더 v1.3.1 · 일정 '+state.events.length+'개 · 캘린더 '+state.cals.length+'개 · 육아 일정 '+kidData.events.length+'개';
   renderKidsSettings();
   setMsg(''); setSyncInfo();
   show($('#settings'));
@@ -2670,8 +3191,10 @@ function connectSheet(raw){
   state.url=url; setSync('busy'); setMsg('연결 확인 중…');
   api('ping').then(p=>{
     if(!p||p.ok!==true) throw new Error((p&&p.error)||'연결 확인에 실패했어요.');
-    if(changed){ knownIds=new Set(); syncState.seenNonEmpty=false; syncState.strikes=0; syncState.lastPull=0; saveSyncState();
-      calsMeta.known=[]; saveCalsMeta(); }
+    if(changed){ knownIds=new Set(); syncState.seenNonEmpty=false; syncState.strikes=0; syncState.lastPull=0;
+      backendVersion=''; syncState.backend='';
+      calsMeta.known=[]; saveCalsMeta(); saveSyncState(); }
+    noteBackendVersion(p.version);
     localStorage.setItem(LS.url,url);
     return kFlushProfile().then(kFlush).then(()=>refreshFromRemote({force:true})).then(res=>{
       if(res && res.error) throw new Error(res.error);
@@ -2709,7 +3232,7 @@ function importJSON(file){
         calsMeta.edited=true; saveCalsMeta();
         pending={}; savePending(); persistLocal(); renderAll();
         if(state.url){
-          api('saveAll',{events:state.events,calendars:state.cals,clear:true})
+          api('saveAll',{events:eventsForSheet(state.events),calendars:state.cals,clear:true})
             .then(r=>{ if(!r||r.ok===false) throw new Error((r&&r.error)||''); knownIds=new Set(state.events.map(e=>String(e.id))); calsMeta.pending=null; calsMeta.known=state.cals.map(c=>String(c.id)); calsMeta.error=''; saveCalsMeta(); syncState.seenNonEmpty=state.events.length>0; syncState.strikes=0; saveSyncState(); toast('가져왔어요'); })
             .catch(err=>toast('이 브라우저에만 가져왔어요 — '+(err.message||'')));
         } else toast('가져왔어요');
@@ -3343,29 +3866,51 @@ function renderKidWeek(){
 /* ------------------------------------------------------------ 육아: 일정 편집 */
 function kRepType(rule){
   if(!rule.freq) return 'none';
-  if(rule.freq==='WEEKLY') return rule.interval===2?'biweekly':'weekly';
-  if(rule.freq==='DAILY') return 'daily';
-  if(rule.freq==='MONTHLY') return 'monthly';
-  return 'yearly';
+  const iv=rule.interval||1, hasEnd=!!(rule.until||rule.count);
+  if(iv===1&&!hasEnd){
+    if(rule.freq==='DAILY') return 'daily';
+    if(rule.freq==='MONTHLY') return 'monthly';
+    if(rule.freq==='YEARLY') return 'yearly';
+    if(rule.freq==='WEEKLY'){
+      const days=rule.byday||[];
+      if(!days.length) return 'weekly';
+      if(days.length===5&&KBYDAY.filter(d=>days.indexOf(d)>=0).join(',')==='MO,TU,WE,TH,FR') return 'weekdays';
+    }
+  }
+  if(iv===2&&!hasEnd&&rule.freq==='WEEKLY'&&!(rule.byday||[]).length) return 'biweekly';
+  return 'custom';
+}
+function kRepFreqSel(){
+  const v=$('#kRep').value;
+  if(v==='custom') return $('#kRepFreq').value||'WEEKLY';
+  if(v==='weekly'||v==='weekdays'||v==='biweekly') return 'WEEKLY';
+  if(v==='daily') return 'DAILY';
+  if(v==='monthly') return 'MONTHLY';
+  if(v==='yearly') return 'YEARLY';
+  return '';
 }
 function kSyncRepFields(){
   const v=$('#kRep').value, et=$('#kEndType').value;
-  $('#kDowWrap').hidden=!(v==='weekly'||v==='biweekly');
-  $('#kEndWrap').hidden=(v==='none');
+  const rep=(v!=='none');
+  $('#kRepIvWrap').hidden=!rep;
+  $('#kDowWrap').hidden=!(v==='weekly'||v==='weekdays'||v==='biweekly'||v==='custom');
+  $('#kEndWrap').hidden=!rep;
   $('#kUntil').hidden=et!=='until';
   $('#kCount').hidden=et!=='count';
+  const f=kRepFreqSel()||$('#kRepFreq').value||'WEEKLY';
+  $('#kRepUnit').textContent=({DAILY:'일마다',WEEKLY:'주마다',MONTHLY:'개월마다',YEARLY:'년마다'}[f]||'주마다');
   kRepHint();
 }
 function kRepHint(){
   const v=$('#kRep').value;
   if(v==='none'){ $('#kRepHint').textContent=''; return; }
   const days=$$('#kDow [data-kd].on').map(function(b){ return b.dataset.kd; });
-  let t={daily:'매일',weekly:'매주',biweekly:'2주마다',monthly:'매월',yearly:'매년'}[v]||'';
-  if(v==='weekly'||v==='biweekly') t+=' '+days.map(function(d){ return WD[KBYDAY.indexOf(d)]; }).join('·');
-  const et=$('#kEndType').value;
-  if(et==='until'&&$('#kUntil').value) t+=' · '+$('#kUntil').value+'까지';
-  if(et==='count') t+=' · '+(parseInt($('#kCount').value,10)||0)+'회';
-  $('#kRepHint').textContent='구글 캘린더 형식으로 저장됩니다: '+t;
+  const freq=kRepFreqSel()||'WEEKLY';
+  const iv=Math.max(1,parseInt($('#kRepInterval').value,10)||1);
+  const rule={freq:freq,interval:iv,byday:(freq==='WEEKLY')?days:[],
+    endType:$('#kEndType').value,until:$('#kUntil').value,count:parseInt($('#kCount').value,10)||0};
+  const t=ruleTextOfRule({freq:freq,interval:iv,byday:rule.byday,until:rule.endType==='until'?String(rule.until).replace(/-/g,''):'',count:rule.endType==='count'?rule.count:0});
+  $('#kRepHint').textContent='구글 캘린더 형식으로 저장됩니다: '+t+'  ·  '+kBuildRRule(rule);
 }
 function renderKidsSupList(){
   const box=$('#kSupList'); if(!box||!kidEditing) return;
@@ -3394,6 +3939,12 @@ function openKidModal(evId, presetDate, presetTime){
     cat:'academy',date:date,endDate:'',allDay:false,start:presetTime||'16:00',end:'',place:'',memo:'',supplies:[],rrule:'',exdates:[],createdAt:'',updatedAt:''
   };
   if(!draft.id&&!draft.end){ draft.end=addMin(draft.start||'16:00',90); }
+  /* 반복 일정의 특정 회차를 열면 그 날짜로 보여 줍니다(이 일정만 고칠 때 기준). */
+  if(ev && presetDate && /^\d{4}-\d{2}-\d{2}$/.test(presetDate) && presetDate!==draft.date){
+    const delta=kDiff(draft.date,presetDate);
+    if(draft.endDate) draft.endDate=kAdd(draft.endDate,delta);
+    draft.date=presetDate;
+  }
   kidEditing={draft:draft,isNew:isNew,occDate:(presetDate||draft.date)};
   $('#kHead').textContent=isNew?'육아 일정 추가':'육아 일정 수정';
   $('#kTitle').value=draft.title||'';
@@ -3414,6 +3965,8 @@ function openKidModal(evId, presetDate, presetTime){
   const rule=kParseRRule(draft.rrule);
   const rt=kRepType(rule);
   $('#kRep').value=rt;
+  $('#kRepFreq').value=rule.freq||'WEEKLY';
+  $('#kRepInterval').value=rule.interval||1;
   const days=rule.byday.length?rule.byday:[KBYDAY[parseYMD(draft.date||kToday()).getDay()]];
   $('#kDow').innerHTML=[0,1,2,3,4,5,6].map(function(i){
     return '<button type="button" class="kchip'+(days.indexOf(KBYDAY[i])>=0?' on':'')+'" data-kd="'+KBYDAY[i]+'">'+WD[i]+'</button>';
@@ -3454,9 +4007,10 @@ function kSaveModal(){
   const repV=$('#kRep').value;
   let rrule='';
   if(repV!=='none'){
-    rrule=kBuildRRule({freq:{daily:'DAILY',weekly:'WEEKLY',biweekly:'WEEKLY',monthly:'MONTHLY',yearly:'YEARLY'}[repV],
-      interval:repV==='biweekly'?2:1,
-      byday:(repV==='weekly'||repV==='biweekly')?$$('#kDow [data-kd].on').map(function(b){ return b.dataset.kd; }):[],
+    const freq=kRepFreqSel()||'WEEKLY';
+    const iv=Math.max(1,parseInt($('#kRepInterval').value,10)||1);
+    rrule=kBuildRRule({freq:freq, interval:iv,
+      byday:(freq==='WEEKLY')?$$('#kDow [data-kd].on').map(function(b){ return b.dataset.kd; }):[],
       endType:$('#kEndType').value,until:$('#kUntil').value,count:parseInt($('#kCount').value,10)||0});
   }
   const ev={
@@ -3469,13 +4023,97 @@ function kSaveModal(){
     createdAt:d.createdAt||new Date().toISOString(), updatedAt:new Date().toISOString()
   };
   const wasNew=kidEditing.isNew;
+  const series=wasNew?null:kidData.events.find(function(x){ return x.id===kidEditing.draft.id; });
+  const occDate=kidEditing.occDate;
+  if(series && series.rrule && occDate && occDate!==kFirstOcc(series)){
+    scopeDialog({
+      title:'육아 일정 수정',
+      body:'"'+(series.title||'(제목 없음)')+'" '+kLabel(occDate)+' 회차를 고쳤습니다.\n어느 범위에 적용할까요?'
+    }).then(function(scope){
+      if(!scope) return;
+      kApplyEditScope(series, ev, occDate, scope);
+      kCloseModal();
+      toast(scope==='one'?'이 일정만 저장했어요':scope==='following'?'이 일정부터 저장했어요':'반복 일정 전체를 저장했어요');
+    });
+    return;
+  }
   kUpsert(ev);
   kCloseModal();
   toast(wasNew?'육아 일정을 추가했어요':'육아 일정을 저장했어요');
 }
+/** 육아 반복 일정의 첫 발생 날짜 */
+function kFirstOcc(ev){
+  if(!ev||!ev.rrule) return ev?ev.date:'';
+  const rule=kParseRRule(ev.rrule);
+  let d=ev.date, guard=0;
+  while(guard++<400){
+    if(kMatchRule(d,ev.date,rule) && (ev.exdates||[]).indexOf(d)<0) return d;
+    d=kAdd(d,1);
+  }
+  return ev.date;
+}
+function kApplyEditScope(series, form, occDate, scope){
+  const now=new Date().toISOString();
+  const first=kFirstOcc(series);
+  if(scope==='all' || (scope==='following'&&occDate===first)){
+    form.id=series.id; form.updatedAt=now; kUpsert(form); return;
+  }
+  const base=JSON.parse(JSON.stringify(series));
+  base.updatedAt=now;
+  if(scope==='one'){
+    base.exdates=(base.exdates||[]).slice();
+    if(base.exdates.indexOf(occDate)<0) base.exdates.push(occDate);
+    kUpsert(base);
+    form.id=uid(); form.rrule=''; form.exdates=[]; form.updatedAt=now;
+    kUpsert(form);
+  } else {
+    const rule=kParseRRule(base.rrule);
+    base.rrule=kBuildRRule({freq:rule.freq,interval:rule.interval,byday:rule.byday,endType:'until',until:kAdd(occDate,-1),count:0});
+    base.exdates=(base.exdates||[]).filter(function(d){ return d<occDate; });
+    kUpsert(base);
+    form.id=uid(); form.updatedAt=now;
+    form.exdates=(form.exdates||[]).filter(function(d){ return d>=occDate; });
+    kUpsert(form);
+  }
+}
+function kApplyDeleteScope(series, occDate, scope){
+  const now=new Date().toISOString();
+  const first=kFirstOcc(series);
+  kCloseModal();
+  if(scope==='all' || (scope==='following'&&occDate===first)){
+    kidData.events=kidData.events.filter(function(x){ return x.id!==series.id; });
+    kSaveLocal(); kQueueDelete(series.id); renderAll();
+    return;
+  }
+  const base=JSON.parse(JSON.stringify(series));
+  base.updatedAt=now;
+  if(scope==='one'){
+    base.exdates=(base.exdates||[]).slice();
+    if(base.exdates.indexOf(occDate)<0) base.exdates.push(occDate);
+  } else {
+    const rule=kParseRRule(base.rrule);
+    base.rrule=kBuildRRule({freq:rule.freq,interval:rule.interval,byday:rule.byday,endType:'until',until:kAdd(occDate,-1),count:0});
+    base.exdates=(base.exdates||[]).filter(function(d){ return d<occDate; });
+  }
+  kUpsert(base);
+  renderAll();
+}
 function kDeleteModal(){
   if(!kidEditing||kidEditing.isNew) return;
   const ev=kidEditing.draft;
+  const series=kidData.events.find(function(x){ return x.id===ev.id; });
+  const occDate=kidEditing.occDate;
+  if(series && series.rrule && occDate && occDate!==kFirstOcc(series)){
+    scopeDialog({
+      title:'육아 일정 삭제',
+      body:'"'+(series.title||'(제목 없음)')+'" '+kLabel(occDate)+' 회차를 지웁니다.\n어느 범위를 지울까요?'
+    }).then(function(scope){
+      if(!scope) return;
+      kApplyDeleteScope(series, occDate, scope);
+      toast(scope==='one'?'이 일정만 지웠어요':scope==='following'?'이 일정부터 지웠어요':'반복 일정을 모두 지웠어요');
+    });
+    return;
+  }
   confirmDialog({title:'육아 일정 삭제',body:'"'+(ev.title||'(제목 없음)')+'" 일정을 삭제할까요?'+((ev.rrule)?'\n\n반복 일정이라 시리즈 전체가 삭제됩니다.':''),okText:'삭제',danger:true}).then(function(ok){
     if(!ok) return;
     kidData.events=kidData.events.filter(function(x){ return x.id!==ev.id; });
@@ -3606,7 +4244,26 @@ function bindKids(){
   $('#kSupAdd').addEventListener('click',kAddSup);
   $('#kSupInput').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); kAddSup(); } });
   $('#kAllDay').addEventListener('change',function(){ $('#kTimes').hidden=$('#kAllDay').checked; });
-  $('#kRep').addEventListener('change',kSyncRepFields);
+  $('#kRep').addEventListener('change',function(){
+    const v=$('#kRep').value;
+    if(v==='none'){ kSyncRepFields(); return; }
+    if(v!=='custom'){
+      $('#kRepFreq').value=kRepFreqSel()||'WEEKLY';
+      $('#kRepInterval').value=(v==='biweekly')?2:1;
+      if(v==='weekdays'){
+        $$('#kDow [data-kd]').forEach(function(b){ b.classList.toggle('on',['MO','TU','WE','TH','FR'].indexOf(b.dataset.kd)>=0); });
+      }
+    }
+    kSyncRepFields();
+  });
+  $('#kRepFreq').addEventListener('change',function(){
+    if($('#kRep').value!=='none') $('#kRep').value='custom';
+    kSyncRepFields();
+  });
+  $('#kRepInterval').addEventListener('input',function(){
+    if($('#kRep').value!=='none') $('#kRep').value='custom';
+    kRepHint();
+  });
   $('#kEndType').addEventListener('change',kSyncRepFields);
   $('#kUntil').addEventListener('change',kRepHint);
   $('#kCount').addEventListener('input',kRepHint);
@@ -3622,7 +4279,8 @@ function bindKids(){
     const on=$$('#kDow [data-kd].on');
     if(b.classList.contains('on')){ if(on.length<=1) return; b.classList.remove('on'); }
     else b.classList.add('on');
-    kRepHint();
+    if($('#kRep').value!=='none') $('#kRep').value='custom';
+    kSyncRepFields();
   });
   $('#setKidsSync').addEventListener('click',function(){
     if(!state.url){ setMsg('먼저 시트를 연결해 주세요.'); return; }
@@ -3676,13 +4334,13 @@ function bind(){
   });
 
   $('#popClose').addEventListener('click',closePop);
-  $('#popEdit').addEventListener('click',()=>{ const o=OCC.get(currentPop); if(o) openModal({event:o.ev}); });
-  $('#popDel').addEventListener('click',()=>{ const o=OCC.get(currentPop); if(o) deleteEvent(o.ev); });
+  $('#popEdit').addEventListener('click',()=>{ const o=OCC.get(currentPop); if(o) openModal({event:o.ev, occDate:o.occDate}); });
+  $('#popDel').addEventListener('click',()=>{ const o=OCC.get(currentPop); if(o) deleteEvent(o.ev, o.occDate); });
 
   $('#mClose').addEventListener('click',closeModal);
   $('#mCancel').addEventListener('click',closeModal);
   $('#mSave').addEventListener('click',saveModal);
-  $('#mDelete').addEventListener('click',()=>{ if(editing) deleteEvent(editing.ev); });
+  $('#mDelete').addEventListener('click',()=>{ if(editing) deleteEvent(editing.ev, editing.occDate); });
   $('#mSend').addEventListener('click',()=>{
     if(!editing) return;
     const ev=collectForm();
@@ -3694,7 +4352,28 @@ function bind(){
   });
   $('#mAllDay').addEventListener('change',()=>{ syncAllDay(); updateDur(); });
   ['mStartDate','mStartTime','mEndDate','mEndTime'].forEach(id=>$('#'+id).addEventListener('change',updateDur));
-  $('#mRepeat').addEventListener('change',e=>{ if(editing) editing.ev.repeat=e.target.value; $('#mRepeatHint').hidden=e.target.value==='none'; });
+  $('#mRepeat').addEventListener('change',()=>{
+    const v=$('#mRepeat').value;
+    if(v==='none'){ mRepSync(); return; }
+    if(v!=='custom'){
+      const cur=mRepReadPanel();
+      const freq={daily:'DAILY',weekly:'WEEKLY',weekdays:'WEEKLY',monthly:'MONTHLY',yearly:'YEARLY'}[v]||'WEEKLY';
+      mRepFillPanel({freq:freq, interval:1, byday:(v==='weekdays')?['MO','TU','WE','TH','FR']:[], endType:cur.endType, until:(cur.endType==='until'?cur.until:''), count:(cur.endType==='count'?cur.count:0)});
+    }
+    mRepSync();
+  });
+  $('#mRepFreq').addEventListener('change',mRepSync);
+  $('#mRepInterval').addEventListener('input',mRepSync);
+  $('#mEndType').addEventListener('change',mRepSync);
+  $('#mUntil').addEventListener('change',mRepSync);
+  $('#mCount').addEventListener('input',mRepSync);
+  $('#mDow').addEventListener('click',e=>{
+    const b=e.target.closest('[data-kd]'); if(!b) return;
+    b.classList.toggle('on');
+    b.setAttribute('aria-pressed',b.classList.contains('on')?'true':'false');
+    if($('#mRepeat').value!=='none') $('#mRepeat').value='custom';
+    mRepSync();
+  });
   $('#mCalPicker').addEventListener('click',e=>{
     const b=e.target.closest('[data-pickcal]'); if(!b||!editing) return;
     editing.ev.calId=b.dataset.pickcal; renderCalPicker(b.dataset.pickcal); renderEvColorPicker(editing.ev.color||'');
@@ -3742,7 +4421,7 @@ function bind(){
     confirmDialog({title:'시트로 올리기',body:`이 브라우저의 일정 ${state.events.length}개로 시트를 통째로 바꿉니다.\n시트에만 있는 일정은 사라집니다.\n\n보통은 그냥 두셔도 자동으로 맞춰집니다.`,okText:'올리기'}).then(ok=>{
       if(!ok) return;
       setMsg('올리는 중…'); setSync('busy');
-      api('saveAll',{events:state.events,calendars:state.cals,clear:true}).then(r=>{
+      api('saveAll',{events:eventsForSheet(state.events),calendars:state.cals,clear:true}).then(r=>{
         if(!r||r.ok===false) throw new Error((r&&r.error)||'올리지 못했어요');
         pending={}; savePending();
         knownIds=new Set(state.events.map(e=>String(e.id)));
@@ -3805,6 +4484,7 @@ function bind(){
     const tag=(e.target.tagName||'').toLowerCase();
     const typing=tag==='input'||tag==='textarea'||tag==='select';
     if(e.key==='Escape'){
+      if(!$('#scope').hidden && window.__scopeDone){ window.__scopeDone(null); return; }
       if(!$('#confirm').hidden && window.__cbDone){ window.__cbDone(false); return; }
       if(!$('#qa').hidden){ closeQuickAdd(); return; }
       if(!$('#pop').hidden){ closePop(); return; }
@@ -3817,7 +4497,7 @@ function bind(){
       return;
     }
     if(typing) return;
-    if(!$('#modal').hidden||!$('#calModal').hidden||!$('#settings').hidden||!$('#kModal').hidden) return;
+    if(!$('#modal').hidden||!$('#calModal').hidden||!$('#settings').hidden||!$('#kModal').hidden||!$('#scope').hidden) return;
     if(state.tab!=='cal'){ if(e.key.toLowerCase()==='n'){ e.preventDefault(); openKidModal(null,kToday()); } return; }
     const k=e.key.toLowerCase();
     if(k==='t'){ goToday(); }

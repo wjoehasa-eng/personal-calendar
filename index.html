@@ -870,25 +870,29 @@ function defaultCals(){
   ];
 }
 
-/* 데모용 가상 일정 — 실제 개인정보 없음 */
-function demoEvents(){
-  const t=TODAY;
-  const at=(dn,h,m)=>{ const x=addDays(t,dn); x.setHours(h,(m||0),0,0); return x; };
-  const ev=o=>Object.assign({id:uid(),repeat:'none',location:'',memo:'',googleId:'',googleSentAt:'',updatedAt:new Date().toISOString()},o);
-  return [
-    ev({title:'운동 — 수영', start:DT(at(0,7)), end:DT(at(0,8,30)), calId:'personal'}),
-    ev({title:'점심 약속', start:DT(at(0,12)), end:DT(at(0,13)), calId:'personal', location:'근처 식당'}),
-    ev({title:'가족 외식', start:DT(at(0,19)), end:DT(at(0,20,30)), calId:'family', location:'동네 식당', memo:'저녁 7시 예약'}),
-    ev({title:'치과 예약', start:DT(at(1,15)), end:DT(at(1,16)), calId:'personal'}),
-    ev({title:'학원 상담 준비', start:YMD(addDays(t,1)), end:YMD(addDays(t,1)), allDay:true, calId:'memo'}),
-    ev({title:'독서 모임', start:DT(at(2,20)), end:DT(at(2,21,30)), calId:'personal', repeat:'weekly'}),
-    ev({title:'주말 나들이', start:YMD(addDays(t,3)), end:YMD(addDays(t,4)), allDay:true, calId:'family', memo:'날씨 보고 결정'}),
-    ev({title:'투자 복기', start:DT(at(5,9)), end:DT(at(5,10)), calId:'invest', repeat:'monthly'}),
-    ev({title:'장보기', start:DT(at(6,11)), end:DT(at(6,12)), calId:'memo'}),
-    ev({title:'병원 정기검진', start:DT(at(-2,10)), end:DT(at(-2,11)), calId:'personal'}),
-    ev({title:'생일 축하', start:YMD(addDays(t,9)), end:YMD(addDays(t,9)), allDay:true, calId:'family', repeat:'yearly'}),
-    ev({title:'보험료 납부', start:DT(at(7,9)), end:DT(at(7,9,30)), calId:'invest'})
-  ];
+/* 가상 일정 1회성 정리용 시그니처 (기존 브라우저에 저장된 데모 데이터 제거) */
+const DEMO_SIGS = new Set([
+  '운동 — 수영|personal|',
+  '점심 약속|personal|근처 식당',
+  '가족 외식|family|동네 식당',
+  '치과 예약|personal|',
+  '학원 상담 준비|memo|',
+  '독서 모임|personal|',
+  '주말 나들이|family|',
+  '투자 복기|invest|',
+  '장보기|memo|',
+  '병원 정기검진|personal|',
+  '생일 축하|family|',
+  '보험료 납부|invest|'
+]);
+function purgeSavedDemo(){
+  try{
+    if(localStorage.getItem('pcal_demo_purged_v1')==='1') return;
+    const before=state.events.length;
+    state.events=state.events.filter(ev=>!DEMO_SIGS.has([ev.title||'', ev.calId||'', ev.location||''].join('|')));
+    if(state.events.length!==before) persistLocal();
+    localStorage.setItem('pcal_demo_purged_v1','1');
+  }catch(e){}
 }
 
 /* ------------------------------------------------------------ 저장 */
@@ -1145,13 +1149,6 @@ function renderMonth(){
   $('#monthBody').innerHTML=html;
 
   const oldBanner=$('#emptyBanner'); if(oldBanner) oldBanner.remove();
-  if(!state.events.length){
-    const b=document.createElement('div');
-    b.className='empty-banner'; b.id='emptyBanner';
-    b.innerHTML='<b>아직 일정이 없어요</b><p>날짜 칸을 눌러 바로 추가하거나,<br>가상 일정으로 화면을 먼저 둘러보세요.</p><button class="btn primary" id="loadDemo">가상 일정으로 둘러보기</button>';
-    $('#viewMonth').appendChild(b);
-    $('#loadDemo').addEventListener('click',()=>{ state.events=demoEvents(); persistLocal(); renderAll(); toast('가상 일정을 채웠어요'); });
-  }
 
   const rows=$$('#monthBody .week-row');
   const rowH=Math.max(64, ($('#monthBody').clientHeight||430)/weeks);
@@ -1308,9 +1305,8 @@ function renderSchedule(){
   }).slice(0,400);
 
   if(!occs.length){
-    $('#sch').innerHTML=`<div class="empty"><b>다가오는 일정이 없어요</b><span>＋ 만들기나 <b>N</b> 키로 첫 일정을 추가해 보세요.</span><button class="btn primary" id="schAdd" style="margin-top:8px">일정 만들기</button><button class="btn text" id="schDemo">가상 일정으로 둘러보기</button></div>`;
+    $('#sch').innerHTML=`<div class="empty"><b>다가오는 일정이 없어요</b><span>＋ 만들기나 <b>N</b> 키로 첫 일정을 추가해 보세요.</span><button class="btn primary" id="schAdd" style="margin-top:8px">일정 만들기</button></div>`;
     $('#schAdd').addEventListener('click',()=>openModal({}));
-    $('#schDemo').addEventListener('click',()=>{ state.events=demoEvents(); persistLocal(); renderAll(); toast('가상 일정을 채웠어요'); });
     return;
   }
 
@@ -2154,7 +2150,7 @@ function init(){
   if(hashUrl) state.url=hashUrl;
   else state.url=localStorage.getItem(LS.url)||'';
   if(!state.cals.length) state.cals=defaultCals();
-  if(qs.get('demo')==='1' && !state.events.length){ state.events=demoEvents(); persistLocal(); }
+  purgeSavedDemo();
   if(qs.get('d')){ const d=parseYMD(qs.get('d')); if(!isNaN(d.getTime())){ state.cursor=d; state.miniCursor=new Date(d.getFullYear(),d.getMonth(),1); } }
   if(qs.get('view')){ const v=qs.get('view'); if(['month','week','day','schedule'].indexOf(v)>=0) state.view=v; }
   state.miniCursor=new Date(state.cursor.getFullYear(),state.cursor.getMonth(),1);

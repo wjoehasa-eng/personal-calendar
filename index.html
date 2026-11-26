@@ -419,7 +419,212 @@ input[type=date],input[type=time]{font-family:inherit}
 .sp-item .sp-d{font-size:11px;color:var(--muted);white-space:nowrap}
 .sp-none{padding:16px;font-size:13px;color:var(--muted)}
 
+/* ============================================================ 전환 탭 바 (육아 · 개인 캘린더) */
+.tabbar{
+  flex:0 0 auto;display:flex;align-items:stretch;justify-content:center;gap:2px;height:58px;padding:0 8px;
+  border-top:1px solid var(--line);background:#fff;z-index:46;
+}
+.tabbar button{
+  flex:0 1 210px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  border-radius:12px;margin:6px 2px;color:#5f6368;font-size:11px;line-height:1.2;position:relative;
+}
+.tabbar button .em{font-size:17px;line-height:1.1}
+.tabbar button .lb{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tabbar button:hover{background:var(--hover)}
+.tabbar button.on{color:var(--blue);background:var(--sel);font-weight:600}
+.tabbar button.on::after{content:"";position:absolute;left:50%;top:-6px;transform:translateX(-50%);width:28px;height:3px;border-radius:0 0 3px 3px;background:var(--blue)}
+
+/* ============================================================ 육아: 공통 */
+.kidsbar{
+  flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);
+  background:#fff;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
+}
+.kidsbar::-webkit-scrollbar{display:none}
+.kchip{
+  display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:16px;border:1px solid var(--line2);
+  background:#fff;font-size:12.5px;color:#3c4043;white-space:nowrap;flex:0 0 auto;
+}
+.kchip:hover{background:var(--hover)}
+.kchip .kd{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.kchip.on{border-color:var(--blue);background:var(--sel);color:#174ea6;font-weight:600}
+.kchip.on .kd{box-shadow:0 0 0 2px #fff inset}
+.kgrow{flex:1 1 auto;min-width:4px}
+.kadd{
+  display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:16px;background:var(--blue);color:#fff;
+  font-size:12.5px;font-weight:500;white-space:nowrap;flex:0 0 auto;
+}
+.kadd:hover{background:var(--blue-dark)}
+#kidGear{font-size:15px;color:#5f6368}
+.kpick{display:flex;gap:6px;flex-wrap:wrap}
+.kpick.kdow .kchip{min-width:38px;padding:0 8px;justify-content:center}
+.kp{flex:1 1 auto;min-height:0;overflow-y:auto;padding:12px 16px 30px}
+.kp-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
+.kp-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.kcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0}
+.kcard-h{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.kcard-h h2{font-size:14px;margin:0;font-weight:600;color:#3c4043}
+.kcard-h .ksub{font-size:11px;color:var(--muted)}
+.kcard-h .kright{margin-left:auto;display:flex;align-items:center;gap:6px}
+.knum{font-variant-numeric:tabular-nums}
+.kstrip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin:2px 0 10px}
+.kday{
+  border:1px solid var(--line);border-radius:10px;background:#fff;padding:6px 4px;text-align:center;
+  min-width:0;display:flex;flex-direction:column;gap:2px;align-items:center;
+}
+.kday:hover{background:var(--hover)}
+.kday .kwd{font-size:10px;color:var(--muted);line-height:1.2}
+.kday .kdn{font-size:15px;font-weight:600;color:#3c4043;line-height:1.2}
+.kday.today{border-color:var(--blue);background:#f3f8ff}
+.kday.today .kdn{color:var(--blue)}
+.kday.sun .kwd,.kday.sun .kdn{color:#c5221f}
+.kday .kdots{display:flex;gap:2px;justify-content:center;min-height:6px;flex-wrap:wrap}
+.kday .kdots i{width:5px;height:5px;border-radius:50%;display:block}
+.kday .kdl{display:none}
+.ksum{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11.5px;color:#5f6368;border-top:1px solid #f1f3f4;padding-top:8px}
+.ksum span{display:inline-flex;align-items:center;gap:4px}
+.ksum b{color:#3c4043;font-size:13px}
+.ksum .kwarn b{color:#b06000}
+.ksum i{width:1px;height:12px;background:var(--line)}
+.ktem{display:flex;flex-direction:column;gap:2px;padding:6px 0}
+.ktem .kempty{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.ktem .kempty button{color:var(--blue);font-size:12px;font-weight:500}
+.kitem{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:6px 4px;border-radius:8px;min-width:0}
+.kitem:hover{background:var(--hover)}
+.kitem .kbar{width:3px;align-self:stretch;min-height:24px;border-radius:2px;flex:0 0 3px}
+.kitem .ktime{font-size:11px;color:#5f6368;flex:0 0 74px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.kitem .kmain{flex:1 1 auto;min-width:0}
+.kitem .kti{font-size:13px;color:#1f1f1f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kitem .kmeta{font-size:10.5px;color:var(--muted);margin-top:1px;display:flex;gap:8px;flex-wrap:wrap;overflow:hidden}
+.kitem.past{opacity:.55}
+.kitem.now .kti{font-weight:600}
+.kbadge{display:inline-block;font-size:10px;line-height:16px;padding:0 6px;border-radius:8px;background:#f1f3f4;color:#5f6368;margin-left:4px;vertical-align:1px}
+.kbadge.kc{background:color-mix(in srgb,var(--c) 16%,#fff);color:var(--c)}
+.kbadge.kwarn{background:#fef7e0;color:#b06000}
+.kdayh{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#3c4043;margin:2px 0 2px}
+.kdayh .kdate{font-size:11px;color:var(--muted);font-weight:400}
+.kdayh .kcnt{margin-left:auto;font-size:11px;color:var(--muted);font-weight:400}
+.kgroup{margin:8px 0 2px}
+.kgroup-h{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#3c4043;margin-bottom:2px;min-width:0}
+.kgroup-h b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kgroup-h .kwhen{font-size:10.5px;color:var(--muted);flex:0 0 auto}
+.kgroup-h .kpg{margin-left:auto;font-size:10.5px;color:#b06000;flex:0 0 auto}
+.kgroup-h .kpg.done{color:#1e8e3e}
+.ksup{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:5px 4px;border-radius:8px;font-size:13px;color:#3c4043;min-width:0}
+.ksup:hover{background:var(--hover)}
+.ksup .kcb{width:18px;height:18px;border-radius:5px;border:1.5px solid #bdc1c6;display:flex;align-items:center;justify-content:center;flex:0 0 18px}
+.ksup .kcb svg{width:12px;height:12px;fill:none;stroke:#fff;stroke-width:2.8;opacity:0}
+.ksup .ktx{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ksup.on .kcb{background:#1e8e3e;border-color:#1e8e3e}
+.ksup.on .kcb svg{opacity:1}
+.ksup.on .ktx{color:#9aa0a6;text-decoration:line-through}
+.kup{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:7px 4px;border-radius:8px;min-width:0}
+.kup:hover{background:var(--hover)}
+.kup .kdd{flex:0 0 52px;text-align:center;font-size:10.5px;color:#5f6368}
+.kup .kdd b{display:block;font-size:14px;color:#3c4043;font-variant-numeric:tabular-nums}
+.kup .kdd.soon b{color:#c5221f}
+.kup .kum{flex:1 1 auto;min-width:0}
+.kup .kum strong{display:block;font-size:13px;font-weight:500;color:#1f1f1f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kup .kum span{font-size:10.5px;color:var(--muted)}
+.khello{text-align:center;padding:34px 16px 20px;max-width:520px;margin:0 auto}
+.khello .kem{font-size:34px;line-height:1}
+.khello h2{font-size:17px;font-weight:600;margin:10px 0 6px;color:#3c4043}
+.khello p{font-size:13px;color:#5f6368;line-height:1.6;margin:0 0 14px}
+.khello .kgo{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+.khello .kfeat{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;text-align:left}
+.khello .kfeat div{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:11px;color:#5f6368}
+.khello .kfeat b{display:block;font-size:12px;color:#3c4043;margin-bottom:1px}
+
+/* 육아: 주간 시간표 */
+.kw{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+.kw-head{display:flex;align-items:center;gap:6px;padding:8px 12px 6px;flex:0 0 auto;border-bottom:1px solid var(--line)}
+.kw-range{font-size:13px;font-weight:600;color:#3c4043;white-space:nowrap}
+.kw-scroll{flex:1 1 auto;min-height:0;overflow:auto;padding:8px 10px 18px}
+.kwg{display:grid;grid-template-columns:46px repeat(7,minmax(0,1fr));min-width:0}
+.kw-headrow{position:sticky;top:-8px;background:#fff;z-index:3;flex:0 0 auto}
+.khcell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:2px 0 4px;border-radius:8px;min-width:0}
+.khcell i{font-size:10px;color:var(--muted);font-style:normal}
+.khcell b{font-size:13px;color:#3c4043}
+.khcell.sun i,.khcell.sun b{color:#c5221f}
+.khcell.today b{background:var(--blue);color:#fff;border-radius:11px;min-width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+.khcell:hover{background:var(--hover)}
+.kwallday{flex:0 0 auto;border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:4px}
+.kwallday .klbl{font-size:9.5px;color:var(--muted);text-align:right;padding:2px 4px 0 0}
+.kwallday .kacell{border-left:1px solid #f1f3f4;padding:1px 2px;min-height:18px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kachip{border-radius:4px;font-size:10px;line-height:16px;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:left;color:#fff}
+.kwbody{position:relative;margin-top:2px}
+.ktimes{position:relative}
+.ktimes .khl{position:absolute;right:4px;font-size:9px;color:var(--muted);transform:translateY(-50%);white-space:nowrap}
+.kcol{position:relative;border-left:1px solid #f1f3f4;min-width:0}
+.kcol.sun{background:#fcfcfc}
+.kcol.today{background:#f8fbff}
+.kcol .kline{position:absolute;left:0;right:0;border-top:1px solid #f1f3f4;pointer-events:none}
+.kcol .kline.half{border-top:1px dashed #f7f7f7}
+.kblk{position:absolute;border-radius:6px;padding:2px 3px;font-size:10px;line-height:1.25;color:#fff;overflow:hidden;text-align:left;box-shadow:0 0 0 1px #fff inset}
+.kblk b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kblk span{display:block;opacity:.92;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kblk.tiny{padding:0 3px;display:flex;align-items:center}
+.kblk.tiny b{white-space:nowrap}
+.kblk.tiny span{display:none}
+.know{position:absolute;left:0;right:0;border-top:2px solid #ea4335;z-index:2;pointer-events:none}
+.know::before{content:"";position:absolute;left:-4px;top:-4px;width:7px;height:7px;border-radius:50%;background:#ea4335}
+.kwhint{font-size:10.5px;color:var(--muted);padding:0 2px 6px}
+
+/* 육아: 편집 창 */
+.kpickrow{display:flex;gap:6px;flex-wrap:wrap}
+.dtrow select{border:1px solid var(--line2);border-radius:4px;padding:5px 7px;font-size:13px;background:#fff;min-width:0}
+.dtrow input[type=number]{border:1px solid var(--line2);border-radius:4px;padding:5px 7px;font-size:13px;width:74px}
+#kSupList{display:flex;flex-direction:column;gap:2px}
+#kSupList .khint{margin:0}
+.ksupedit{display:flex;align-items:center;gap:6px;background:#f8f9fa;border-radius:6px;padding:4px 4px 4px 9px;font-size:12.5px}
+.ksupedit span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ksupedit button{width:22px;height:22px;border-radius:50%;color:#5f6368;flex:0 0 22px;display:flex;align-items:center;justify-content:center}
+.ksupedit button:hover{background:#e8eaed}
+.kdaylist{display:flex;flex-direction:column;gap:2px;max-height:46vh;overflow-y:auto}
+
+/* FAB은 탭 바 위로 */
+.fab{bottom:calc(58px + 16px + env(safe-area-inset-bottom,0px))}
+
+/* 육아 화면에서는 캘린더 사이드바를 숨깁니다 */
+body.tab-kids .sidebar{display:none}
+
 /* ============================================================ 반응형 */
+@media (max-width:900px){
+  .kp-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:768px){
+  .tabbar{height:auto;padding:2px 4px calc(2px + env(safe-area-inset-bottom,0px));gap:0}
+  .tabbar button{flex:1 1 0;margin:3px 1px;padding:4px 2px;font-size:10.5px;height:50px}
+  .tabbar button .em{font-size:16px}
+  .tabbar button.on::after{top:-3px;width:22px;height:2px}
+  body.tab-kids #menuBtn{display:none}
+  .kidsbar{padding:6px 8px;gap:4px}
+  .kchip{height:30px;padding:0 10px;font-size:12px}
+  .kadd{height:30px;padding:0 10px;font-size:12px}
+  .kp{padding:10px 10px 92px}
+  .kup .kdd{flex:0 0 56px;white-space:nowrap;font-size:10px}
+  .kcard{padding:10px 10px;border-radius:12px}
+  .kstrip{gap:3px}
+  .kday{padding:5px 2px;border-radius:8px}
+  .kday .kdn{font-size:14px}
+  .kitem .ktime{flex:0 0 62px;font-size:10.5px}
+  .kw-head{padding:6px 8px 4px;gap:4px}
+  .kw-range{font-size:12px}
+  .kw-scroll{padding:6px 6px 14px}
+  .kwg{grid-template-columns:38px repeat(7,minmax(0,1fr))}
+  .kblk{font-size:9.5px;padding:1px 2px;border-radius:5px}
+  .kup .kdd{flex:0 0 46px}
+  .khello{padding:20px 10px}
+  .khello .kfeat{grid-template-columns:minmax(0,1fr)}
+  .fab{bottom:calc(60px + 12px + env(safe-area-inset-bottom,0px));right:14px}
+  #toast{bottom:calc(74px + env(safe-area-inset-bottom,0px))}
+}
+@media (min-width:700px){
+  .kday{text-align:left;align-items:stretch;padding:6px 7px}
+  .kday .kdn{font-size:15px}
+  .kday .kdots{justify-content:flex-start}
+  .kday .kdl{display:block;font-size:10px;color:#5f6368;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+}
+
 @media (max-width:900px){
   .searchbox{width:180px}
   .htitle{font-size:20px}
@@ -575,6 +780,19 @@ input[type=date],input[type=time]{font-family:inherit}
     </aside>
 
     <main class="main" id="main">
+      <!-- 육아 필터 바 -->
+      <div class="kidsbar" id="kidsBar" hidden></div>
+
+      <!-- 육아 홈 -->
+      <section class="view" id="viewKidHome" hidden>
+        <div class="kp" id="kidHome"></div>
+      </section>
+
+      <!-- 육아 시간표 -->
+      <section class="view" id="viewKidWeek" hidden>
+        <div class="kw" id="kidWeek"></div>
+      </section>
+
       <!-- 월간 -->
       <section class="view" id="viewMonth">
         <div class="month">
@@ -598,6 +816,13 @@ input[type=date],input[type=time]{font-family:inherit}
       </section>
     </main>
   </div>
+
+  <!-- ======== 전환 탭 바 ======== -->
+  <nav class="tabbar" id="tabBar" aria-label="화면 전환">
+    <button data-tab="kidHome" aria-label="육아 홈"><span class="em">👶</span><span class="lb">육아 홈</span></button>
+    <button data-tab="kidWeek" aria-label="시간표"><span class="em">🗓️</span><span class="lb">시간표</span></button>
+    <button data-tab="cal" aria-label="개인 캘린더"><span class="em">📅</span><span class="lb">개인 캘린더</span></button>
+  </nav>
 </div>
 
 <button class="fab" id="fab" aria-label="일정 만들기">
@@ -723,6 +948,79 @@ input[type=date],input[type=time]{font-family:inherit}
   </div>
 </div>
 
+<!-- 육아 일정 편집 -->
+<div class="modal" id="kModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="kHead">
+    <div class="modal-head">
+      <button class="icon-btn" id="kClose" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+      <h2 id="kHead">육아 일정 추가</h2>
+    </div>
+    <div class="modal-body">
+      <input class="title-input" id="kTitle" placeholder="무엇인가요? 예) 태권도, 예방접종" maxlength="60" autocomplete="off">
+      <div class="field">
+        <span class="ficon">👶</span>
+        <div class="fbody"><div class="kpick" id="kKidsWrap"></div><div class="hint">아이를 고르지 않으면 둘 다로 들어갑니다. 이름은 설정에서 바꿀 수 있어요.</div></div>
+      </div>
+      <div class="field">
+        <span class="ficon">🏷️</span>
+        <div class="fbody"><select id="kCat"></select></div>
+      </div>
+      <div class="field">
+        <span class="ficon">📅</span>
+        <div class="fbody">
+          <div class="dtrow"><input type="date" id="kDate"><span class="dash">–</span><input type="date" id="kEndDate"></div>
+          <div class="hint">여러 날이면 오른쪽에 마지막 날을 고르세요.</div>
+          <label class="allDay"><input type="checkbox" id="kAllDay"> 종일 (시간 없이)</label>
+          <div class="dtrow" id="kTimes"><input type="time" id="kStart" step="300"><span class="dash">–</span><input type="time" id="kEnd" step="300"></div>
+        </div>
+      </div>
+      <div class="field">
+        <span class="ficon">📍</span>
+        <div class="fbody"><input type="text" id="kPlace" placeholder="장소 (선택) 예) 문화체육관 3층" maxlength="60"></div>
+      </div>
+      <div class="field">
+        <span class="ficon">🔁</span>
+        <div class="fbody">
+          <select id="kRep">
+            <option value="none">반복 없음</option>
+            <option value="daily">매일</option>
+            <option value="weekly">매주</option>
+            <option value="biweekly">2주마다</option>
+            <option value="monthly">매월</option>
+            <option value="yearly">매년</option>
+          </select>
+          <div id="kDowWrap" hidden><div class="kpick kdow" id="kDow"></div></div>
+          <div class="dtrow" id="kEndWrap" hidden>
+            <select id="kEndType"><option value="never">계속</option><option value="until">날짜까지</option><option value="count">횟수</option></select>
+            <input type="date" id="kUntil">
+            <input type="number" id="kCount" min="1" max="500" value="12" hidden>
+          </div>
+          <div class="hint" id="kRepHint"></div>
+        </div>
+      </div>
+      <div class="field">
+        <span class="ficon">🎒</span>
+        <div class="fbody">
+          <div id="kSupList"></div>
+          <div class="dtrow"><input type="text" id="kSupInput" placeholder="준비물 예) 수영복, 물통" maxlength="40"><button class="btn sm" id="kSupAdd">추가</button></div>
+          <div class="hint">준비물은 육아 홈에서 체크할 수 있어요.</div>
+        </div>
+      </div>
+      <div class="field">
+        <span class="ficon">📝</span>
+        <div class="fbody"><textarea id="kMemo" placeholder="메모 (선택) — 연락처·준비금·주차 등" maxlength="500"></textarea></div>
+      </div>
+      <div class="hint" id="kSkipWrap" hidden><button class="btn text sm" id="kSkip">이 날만 건너뛰기</button> <span id="kSkipLabel"></span></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger-text" id="kDel">삭제</button>
+      <span class="spacer"></span>
+      <button class="btn text" id="kCancel">취소</button>
+      <button class="btn primary" id="kSave">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- 설정 -->
 <div class="modal" id="settings" hidden>
   <div class="modal-card" style="max-width:540px" role="dialog" aria-modal="true" aria-labelledby="setHead">
@@ -747,6 +1045,17 @@ input[type=date],input[type=time]{font-family:inherit}
         </div>
         <div class="hint" id="setSyncInfo"></div>
         <div class="hint" id="setMsg"></div>
+      </div>
+      <div class="field" style="flex-direction:column;align-items:stretch;gap:8px">
+        <div class="sec-title">육아 — 아이</div>
+        <div class="hint">이름을 바꾸면 이 기기와 비공개 시트에 함께 저장되어 휴대폰·PC에도 같은 이름으로 보입니다. 공개 저장소에는 기본값(아이 1·아이 2)만 들어 있습니다.</div>
+        <div class="row" id="setKids"></div>
+        <div class="row">
+          <button class="btn text sm" id="setKidsSync">↻ 육아 데이터 새로 고침</button>
+          <button class="btn text sm" id="setKidsExport">육아 JSON 내보내기</button>
+          <button class="btn text sm" id="setKidsImport">육아 JSON 가져오기</button>
+        </div>
+        <div class="hint" id="setKidsInfo"></div>
       </div>
       <div class="field">
         <span class="ficon">🗓️</span>
@@ -788,11 +1097,14 @@ input[type=date],input[type=time]{font-family:inherit}
 
 <div id="toast"></div>
 <input type="file" id="importFile" accept="application/json" hidden>
+<input type="file" id="kidsImportFile" accept="application/json" hidden>
 
 <script>
 /* =====================================================================
-   내 캘린더 — 단일 파일 앱 (v1.1.0)
-   로컬(localStorage) 또는 비공개 구글 시트(Apps Script)에 일정을 저장하고,
+   내 캘린더 — 단일 파일 앱 (v1.2.0)
+   개인 캘린더 + 육아 홈·시간표(아이 일정·준비물·학원 시간표)를 한 앱에 담았습니다.
+   아래쪽 탭으로 👶 육아 홈 · 🗓️ 시간표 · 📅 개인 캘린더를 오갑니다.
+   로컬(localStorage) 또는 비공개 구글 시트(Apps Script)에 저장하고,
    PC와 휴대폰이 화면으로 돌아올 때·1분마다 서로 맞춥니다.
    ===================================================================== */
 (function(){
@@ -1181,13 +1493,14 @@ function applyRemote(d){
   const remote=Array.isArray(d.events)?d.events:[];
   const remoteEmpty=remote.length===0;
   const calsChanged=applyRemoteCals(d.calendars);
+  const kidsChanged=kApplyRemote(d.kids);
 
   // 시트가 비어 있을 때 이 기기의 일정을 지우지 않습니다(처음 연결했는데 아직 안 올린 경우 등).
   // 일정을 정말 전부 지운 경우는 연속 두 번 비어 있을 때만 인정합니다(저장 도중의 빈 응답 보호).
   if(remoteEmpty && state.events.length && pendingCount()===0){
-    if(!syncState.seenNonEmpty) return afterCals_({applied:false, changed:false, reason:'empty-sheet'}, calsChanged);
+    if(!syncState.seenNonEmpty) return afterKids_(afterCals_({applied:false, changed:false, reason:'empty-sheet'}, calsChanged), kidsChanged);
     syncState.strikes=(syncState.strikes||0)+1; saveSyncState();
-    if(syncState.strikes<2) return afterCals_({applied:false, changed:false, reason:'empty-once'}, calsChanged);
+    if(syncState.strikes<2) return afterKids_(afterCals_({applied:false, changed:false, reason:'empty-once'}, calsChanged), kidsChanged);
   } else if(!remoteEmpty && syncState.strikes){ syncState.strikes=0; saveSyncState(); }
   if(!remoteEmpty) syncState.seenNonEmpty=true;
 
@@ -1221,7 +1534,7 @@ function applyRemote(d){
 
   knownIds=new Set(remoteIds); saveSyncState();
   const before=sigOf(state.events), after=sigOf(out);
-  if(before===after && !calsChanged) return {applied:true, changed:false};
+  if(before===after && !calsChanged) return afterKids_({applied:true, changed:false}, kidsChanged);
   state.events=out;
   persistLocal(); renderAll(); setSyncInfo();
   return {applied:true, changed:true};
@@ -1230,6 +1543,12 @@ function applyRemote(d){
 function afterCals_(res, calsChanged){
   if(calsChanged){ persistLocal(); renderAll(); setSyncInfo(); }
   if(calsChanged && res && !res.changed) res.calendarsChanged=true;
+  return res;
+}
+/** 육아 데이터만 바뀐 경우에도 화면·저장을 맞춰 줍니다. */
+function afterKids_(res, kidsChanged){
+  if(kidsChanged){ kSaveLocal(); renderAll(); setSyncInfo(); }
+  if(kidsChanged && res && !res.changed) res.kidsChanged=true;
   return res;
 }
 
@@ -1268,7 +1587,7 @@ function startAutoSync(){
   autoSyncStarted=true;
   const kick=()=>{
     if(!state.url || document.visibilityState==='hidden') return;
-    flushCals().then(()=>flushPending()).then(()=>refreshFromRemote({}));
+    flushCals().then(()=>flushPending()).then(()=>kFlushProfile()).then(()=>kFlush()).then(()=>refreshFromRemote({}));
   };
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') kick(); });
   window.addEventListener('focus',kick);
@@ -1277,7 +1596,7 @@ function startAutoSync(){
   setInterval(()=>{
     if(!state.url || document.visibilityState!=='visible') return;
     if(!$('#modal').hidden || !$('#settings').hidden || !$('#calModal').hidden || !$('#qa').hidden) return;
-    flushCals().then(()=>flushPending()).then(()=>refreshFromRemote({quiet:true}));
+    flushCals().then(()=>flushPending()).then(()=>kFlushProfile()).then(()=>kFlush()).then(()=>refreshFromRemote({quiet:true}));
   }, 60000);
 }
 
@@ -1285,7 +1604,7 @@ function startAutoSync(){
 function manualSync(){
   if(!state.url){ openSettings(); setMsg('먼저 시트를 연결해 주세요.'); toast('먼저 설정에서 시트를 연결해 주세요'); return Promise.resolve(); }
   setMsg('시트에서 불러오는 중…'); setSync('busy');
-  return flushCals().then(()=>flushPending()).then(()=>refreshFromRemote({force:true})).then(res=>{
+  return flushCals().then(()=>flushPending()).then(()=>kFlushProfile()).then(()=>kFlush()).then(()=>refreshFromRemote({force:true})).then(res=>{
     if(res && res.error){ setMsg('불러오지 못했어요 — '+res.error); toast('불러오지 못했어요'); }
     else {
       setMsg('최신 상태입니다 · 일정 '+state.events.length+'개'+(pendingCount()?` · 못 올린 변경 ${pendingCount()}건`:''));
@@ -1413,6 +1732,12 @@ function rangeLabel(s,e){
   return `${s.getFullYear()}년 ${s.getMonth()+1}월 ${s.getDate()}일 – ${e.getDate()}일`;
 }
 function renderHeader(){
+  if(state.tab!=='cal'){
+    const t=(state.tab==='kidHome'?'육아 홈':'시간표');
+    $('#htitle').textContent=t;
+    document.title=t+' · 내 캘린더';
+    return;
+  }
   const v=state.view, c=state.cursor, short=innerWidth<=768;
   let t='';
   if(v==='month') t=short? `${c.getFullYear()}. ${c.getMonth()+1}.` : `${c.getFullYear()}년 ${c.getMonth()+1}월`;
@@ -1688,13 +2013,20 @@ function renderSchedule(){
 
 /* ------------------------------------------------------------ 전체 렌더 */
 function renderAll(){
-  renderHeader(); renderCalList(); renderMini();
-  const m=state.view==='month', t=(state.view==='week'||state.view==='day'), s=state.view==='schedule';
-  show($('#viewMonth')); show($('#viewTime')); show($('#viewSchedule'));
-  if(!m) hide($('#viewMonth'));
-  if(!t) hide($('#viewTime'));
-  if(!s) hide($('#viewSchedule'));
-  if(m) renderMonth(); else if(t) renderTime(); else renderSchedule();
+  const kids=(state.tab!=='cal');
+  document.body.classList.toggle('tab-kids',kids);
+  $('#todayBtn').hidden=kids;
+  $('.navgroup').hidden=kids;
+  $('#viewBtn').hidden=kids;
+  $('#searchbox').hidden=kids;
+  renderHeader(); renderCalList(); renderMini(); renderKidBar();
+  $$('#tabBar button').forEach(b=>b.classList.toggle('on',b.getAttribute('data-tab')===state.tab));
+  $$('#viewKidHome,#viewKidWeek,#viewMonth,#viewTime,#viewSchedule').forEach(hide);
+  if(state.tab==='kidHome'){ show($('#viewKidHome')); renderKidHome(); }
+  else if(state.tab==='kidWeek'){ show($('#viewKidWeek')); renderKidWeek(); }
+  else if(state.view==='month'){ show($('#viewMonth')); renderMonth(); }
+  else if(state.view==='schedule'){ show($('#viewSchedule')); renderSchedule(); }
+  else { show($('#viewTime')); renderTime(); }
   if(currentPop && !OCC.has(currentPop)) closePop();
 }
 
@@ -2231,7 +2563,8 @@ function setMsg(s){ const m=$('#setMsg'); if(m) m.textContent=s||''; }
 function openSettings(){
   $('#setUrl').value=state.url; setStatus(state.url?'연결됨':'로컬');
   $('#setWeekStart').value=String(PREFS.weekStart);
-  $('#setVersion').textContent='내 캘린더 v1.1.0 · 일정 '+state.events.length+'개 · 캘린더 '+state.cals.length+'개';
+  $('#setVersion').textContent='내 캘린더 v1.2.0 · 일정 '+state.events.length+'개 · 캘린더 '+state.cals.length+'개 · 육아 일정 '+kidData.events.length+'개';
+  renderKidsSettings();
   setMsg(''); setSyncInfo();
   show($('#settings'));
 }
@@ -2246,7 +2579,7 @@ function connectSheet(raw){
     if(changed){ knownIds=new Set(); syncState.seenNonEmpty=false; syncState.strikes=0; syncState.lastPull=0; saveSyncState();
       calsMeta.known=[]; saveCalsMeta(); }
     localStorage.setItem(LS.url,url);
-    return refreshFromRemote({force:true}).then(res=>{
+    return kFlushProfile().then(kFlush).then(()=>refreshFromRemote({force:true})).then(res=>{
       if(res && res.error) throw new Error(res.error);
       persistLocal(); setSync('on'); setStatus('연결됨'); startAutoSync();
       if(res && res.reason==='empty-sheet') setMsg('시트가 비어 있어요. 아래 "이 브라우저 일정 시트로 올리기"로 지금 일정을 올릴 수 있어요.');
@@ -2307,6 +2640,914 @@ function resetAll(){
   });
 }
 
+/* =====================================================================
+   육아 — 아이 일정 · 준비물 · 주간 시간표 (kids-scheduler 기능 통합)
+   · 저장: 이 브라우저(localStorage) + 비공개 시트의 「육아일정」「육아프로필」 탭
+   · 초기 아이 이름은 '아이 1'·'아이 2' 이고, 설정에서 바꾸면 시트로 함께 저장됩니다.
+   ===================================================================== */
+const KLS={events:'pcal.kids.events.v1',kids:'pcal.kids.kids.v1',pending:'pcal.kids.pending.v1',sync:'pcal.kids.sync.v1',filter:'pcal.kids.filter',tab:'pcal.tab.v1'};
+const KCATS={
+  academy:{label:'학원·수업',color:'#6366f1'},
+  school:{label:'학교·유치원',color:'#0ea5e9'},
+  hospital:{label:'병원·접종',color:'#f43f5e'},
+  event:{label:'행사·나들이',color:'#f59e0b'},
+  supplies:{label:'준비물',color:'#10b981'},
+  etc:{label:'기타',color:'#64748b'}
+};
+const KID_COLORS=['#3B82F6','#F59E0B','#8B5CF6','#EC4899'];
+const KBYDAY=['SU','MO','TU','WE','TH','FR','SA'];
+const KH=48;
+const KCHECK='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l4.6 4.6L19.5 6.8"/></svg>';
+let kidData={children:[],events:[]};
+let kidPending={};
+let kidSync={known:[],seen:false,strikes:0,profilePending:null,profileKnown:[],noKidsTab:false,unsupported:false};
+let kidFilter='all', kidWeekStart='', kidEditing=null;
+let kFlushing=false, kProfileFlushing=false;
+state.tab='cal';
+
+const kAdd=(s,n)=>YMD(addDays(parseYMD(s),n));
+const kDiff=(a,b)=>daysBetween(parseYMD(a),parseYMD(b));
+function kLabel(s){ return (+String(s).slice(5,7))+'월 '+(+String(s).slice(8,10))+'일'; }
+function kWeekStart(s){ const d=parseYMD(s); return kAdd(s,-((d.getDay()+6)%7)); }
+function kToVal(t){ const p=String(t||'').split(':'); return (+p[0]||0)*60+(+p[1]||0); }
+function kToday(){ return YMD(TODAY); }
+
+function kDefaultKids(){
+  return [{id:'kid1',name:'아이 1',color:KID_COLORS[0],updatedAt:''},
+          {id:'kid2',name:'아이 2',color:KID_COLORS[1],updatedAt:''}];
+}
+function kNormKid(c,i){
+  return {id:String((c&&c.id)||('kid'+(i+1))),
+    name:String((c&&c.name)||('아이 '+(i+1))).slice(0,10),
+    color:String((c&&c.color)||KID_COLORS[i%KID_COLORS.length]),
+    updatedAt:String((c&&c.updatedAt)||'')};
+}
+function kNormKids(list){
+  if(!Array.isArray(list)||!list.length) return kDefaultKids();
+  return list.slice(0,4).map(kNormKid);
+}
+function kNormEvent(e,ids){
+  if(!e||typeof e!=='object'||!e.date) return null;
+  const date=String(e.date).slice(0,10);
+  const endDate=e.endDate?String(e.endDate).slice(0,10):'';
+  const ev={
+    id:String(e.id||uid()), title:String(e.title||''),
+    childIds:Array.isArray(e.childIds)?e.childIds.filter(function(x){ return ids.indexOf(x)>=0; }):[],
+    cat:KCATS[e.cat]?e.cat:'etc', date:date,
+    endDate:(endDate&&endDate>date)?endDate:'',
+    allDay:!!e.allDay||!e.start,
+    start:e.start?String(e.start).slice(0,5):'', end:e.end?String(e.end).slice(0,5):'',
+    place:String(e.place||''), memo:String(e.memo||''),
+    supplies:(Array.isArray(e.supplies)?e.supplies:[]).map(function(s){
+      return {id:String((s&&s.id)||uid()),text:String((s&&s.text)||''),done:(s&&s.done&&typeof s.done==='object')?s.done:{}};
+    }).filter(function(s){ return s.text; }),
+    rrule:String(e.rrule||''), exdates:(Array.isArray(e.exdates)?e.exdates:[]).map(String),
+    createdAt:String(e.createdAt||new Date().toISOString()),
+    updatedAt:String(e.updatedAt||new Date().toISOString())
+  };
+  if(ev.allDay){ ev.start=''; ev.end=''; }
+  if(!ev.title&&!ev.supplies.length) return null;
+  return ev;
+}
+
+/* ------------------------------------------------------------ 육아: 저장 */
+function kLoadLocal(){
+  try{
+    kidData.children=kNormKids(JSON.parse(localStorage.getItem(KLS.kids)||'null'));
+  }catch(e){ kidData.children=kDefaultKids(); }
+  const ids=kidData.children.map(function(c){ return c.id; });
+  try{
+    const es=JSON.parse(localStorage.getItem(KLS.events)||'[]');
+    kidData.events=(Array.isArray(es)?es:[]).map(function(e){ return kNormEvent(e,ids); }).filter(Boolean);
+  }catch(e){ kidData.events=[]; }
+  try{
+    const p=JSON.parse(localStorage.getItem(KLS.pending)||'{}');
+    if(p&&typeof p==='object'&&!Array.isArray(p)) kidPending=p;
+  }catch(e){ kidPending={}; }
+  try{
+    const s=JSON.parse(localStorage.getItem(KLS.sync)||'{}');
+    if(s&&typeof s==='object'){
+      kidSync.known=Array.isArray(s.known)?s.known.map(String):[];
+      kidSync.seen=!!s.seen;
+      kidSync.strikes=Number(s.strikes)||0;
+      kidSync.profileKnown=Array.isArray(s.profileKnown)?s.profileKnown.map(String):[];
+      kidSync.profilePending=(s.profilePending&&Array.isArray(s.profilePending.children))?s.profilePending:null;
+      kidSync.unsupported=!!s.unsupported;
+    }
+  }catch(e){}
+}
+function kSaveLocal(){
+  try{
+    localStorage.setItem(KLS.events,JSON.stringify(kidData.events));
+    localStorage.setItem(KLS.kids,JSON.stringify(kidData.children));
+  }catch(e){}
+}
+function kSaveSync(){
+  try{
+    localStorage.setItem(KLS.sync,JSON.stringify({known:kidSync.known,seen:kidSync.seen,strikes:kidSync.strikes,
+      profileKnown:kidSync.profileKnown,profilePending:kidSync.profilePending,unsupported:kidSync.unsupported}));
+  }catch(e){}
+}
+function kSavePending(){ try{ localStorage.setItem(KLS.pending,JSON.stringify(kidPending)); }catch(e){} }
+function kKidById(id){ for(let i=0;i<kidData.children.length;i++) if(kidData.children[i].id===id) return kidData.children[i]; return null; }
+function kKidName(id){ const c=kKidById(id); return c?c.name:''; }
+function kKidsOf(ev){ return (ev.childIds&&ev.childIds.length)?ev.childIds:kidData.children.map(function(c){ return c.id; }); }
+function kMatchFilter(ev){
+  if(kidFilter==='all') return true;
+  return kKidsOf(ev).indexOf(kidFilter)>=0;
+}
+function kColorOf(ev){
+  const ids=kKidsOf(ev);
+  if(ids.length===1){ const c=kKidById(ids[0]); if(c) return c.color; }
+  return (KCATS[ev.cat]||KCATS.etc).color;
+}
+
+/* ------------------------------------------------------------ 육아: 반복 규칙 (RRULE) */
+function kParseRRule(str){
+  const r={freq:'',interval:1,byday:[],until:'',count:0};
+  if(!str) return r;
+  String(str).toUpperCase().split(';').forEach(function(part){
+    const kv=part.split('='), k=kv[0], v=kv[1]||'';
+    if(k==='FREQ') r.freq=v;
+    else if(k==='INTERVAL') r.interval=Math.max(1,parseInt(v,10)||1);
+    else if(k==='BYDAY') r.byday=v.split(',').filter(function(x){ return KBYDAY.indexOf(x)>=0; });
+    else if(k==='UNTIL') r.until=v;
+    else if(k==='COUNT') r.count=Math.max(1,parseInt(v,10)||0);
+  });
+  if(['DAILY','WEEKLY','MONTHLY','YEARLY'].indexOf(r.freq)<0) r.freq='';
+  return r;
+}
+function kBuildRRule(rep){
+  if(!rep||!rep.freq) return '';
+  const parts=['FREQ='+rep.freq];
+  if(rep.freq==='WEEKLY'){
+    if(rep.interval>1) parts.push('INTERVAL='+rep.interval);
+    if(rep.byday&&rep.byday.length) parts.push('BYDAY='+KBYDAY.filter(function(d){ return rep.byday.indexOf(d)>=0; }).join(','));
+  } else if(rep.interval>1) parts.push('INTERVAL='+rep.interval);
+  if(rep.endType==='until'&&rep.until) parts.push('UNTIL='+String(rep.until).replace(/-/g,''));
+  if(rep.endType==='count'&&rep.count>0) parts.push('COUNT='+Math.round(rep.count));
+  return parts.join(';');
+}
+function kMatchRule(d,start,rule){
+  if(kDiff(start,d)<0) return false;
+  const iv=rule.interval||1;
+  if(rule.freq==='DAILY') return kDiff(start,d)%iv===0;
+  if(rule.freq==='WEEKLY'){
+    const wk=kDiff(kWeekStart(start),kWeekStart(d))/7;
+    if(wk%iv!==0) return false;
+    const days=rule.byday.length?rule.byday:[KBYDAY[parseYMD(start).getDay()]];
+    return days.indexOf(KBYDAY[parseYMD(d).getDay()])>=0;
+  }
+  const a=parseYMD(start), b=parseYMD(d);
+  if(rule.freq==='MONTHLY'){
+    const mo=(b.getFullYear()-a.getFullYear())*12+(b.getMonth()-a.getMonth());
+    return mo>=0&&mo%iv===0&&b.getDate()===a.getDate();
+  }
+  if(rule.freq==='YEARLY'){
+    const yr=b.getFullYear()-a.getFullYear();
+    return yr>=0&&yr%iv===0&&b.getMonth()===a.getMonth()&&b.getDate()===a.getDate();
+  }
+  return false;
+}
+function kExpand(ev,from,to){
+  const rule=kParseRRule(ev.rrule);
+  const start=ev.date;
+  const span=(ev.endDate&&ev.endDate>start)?kDiff(start,ev.endDate):0;
+  let limit=to;
+  if(rule.until){
+    const us=rule.until.slice(0,4)+'-'+rule.until.slice(4,6)+'-'+rule.until.slice(6,8);
+    if(us<limit) limit=us;
+  }
+  if(kDiff(start,limit)>3660) limit=kAdd(start,3660);
+  const out=[];
+  if(!rule.freq){
+    return (start<=to&&kAdd(start,span)>=from)?[{ev:ev,date:start,endDate:kAdd(start,span),span:span,first:true}]:[];
+  }
+  let n=0, d=start, guard=0;
+  while(kDiff(d,limit)>=0&&guard++<4000){
+    if(kMatchRule(d,start,rule)){
+      n++;
+      if(rule.count&&n>rule.count) break;
+      if(ev.exdates&&ev.exdates.indexOf(d)>=0){ d=kAdd(d,1); continue; }
+      const occEnd=kAdd(d,span);
+      if(d<=to&&occEnd>=from){
+        out.push({ev:ev,date:d,endDate:occEnd,span:span,first:(n===1)});
+        if(out.length>800) break;
+      }
+    }
+    d=kAdd(d,1);
+  }
+  return out;
+}
+function kOcc(from,to){
+  const out=[];
+  kidData.events.forEach(function(ev){
+    if(!kMatchFilter(ev)) return;
+    kExpand(ev,from,to).forEach(function(o){ out.push(o); });
+  });
+  out.sort(function(a,b){
+    if(a.date!==b.date) return a.date<b.date?-1:1;
+    const sa=a.ev.allDay?-1:kToVal(a.ev.start), sb=b.ev.allDay?-1:kToVal(b.ev.start);
+    if(sa!==sb) return sa-sb;
+    return String(a.ev.title).localeCompare(String(b.ev.title),'ko');
+  });
+  return out;
+}
+function kSupStats(ev,date){
+  let done=0;
+  ev.supplies.forEach(function(s){ if(s.done&&s.done[date]) done++; });
+  return {total:ev.supplies.length,done:done,left:ev.supplies.length-done};
+}
+function kSupDone(ev,s,date){ return !!(s.done&&s.done[date]); }
+
+/* ------------------------------------------------------------ 육아: 시트 동기화 */
+function kTs(o){ const t=Date.parse(String((o&&o.updatedAt)||'')); return isNaN(t)?0:t; }
+function kSig(list){ return (list||[]).map(function(e){ return String(e.id)+'@'+String(e.updatedAt||''); }).sort().join('|'); }
+
+function kQueue(ev){
+  if(!state.url||!ev||!ev.id) return;
+  kidPending[ev.id]=ev; kSavePending(); kFlush();
+}
+function kQueueDelete(id){
+  if(!state.url||!id) return;
+  kidPending[id]='delete'; kSavePending(); kFlush();
+}
+async function kFlush(){
+  if(!state.url||kFlushing||kidSync.unsupported) return false;
+  if(!Object.keys(kidPending).length) return true;
+  kFlushing=true;
+  try{
+    let guard=0;
+    while(Object.keys(kidPending).length&&guard++<500){
+      const id=Object.keys(kidPending)[0], item=kidPending[id];
+      const r = item==='delete' ? await api('deleteKidsEvent',{id:id}) : await api('saveKidsEvent',{event:item});
+      if(!r||r.ok===false) throw new Error((r&&r.error)||'육아 일정을 시트에 저장하지 못했습니다.');
+      if(item!=='delete' && kidSync.known.indexOf(String(id))<0) kidSync.known.push(String(id));
+      delete kidPending[id]; kSavePending();
+    }
+    kSaveSync(); setSync('on'); setSyncInfo();
+    return true;
+  }catch(err){
+    const msg=String((err&&err.message)||'');
+    if(/알 수 없는 요청/.test(msg)){ kidSync.unsupported=true; kSaveSync(); }
+    else setSync(navigator.onLine===false?'offline':'error');
+    setSyncInfo();
+    return false;
+  }finally{ kFlushing=false; }
+}
+function kQueueProfile(){
+  kidSync.profilePending={children:JSON.parse(JSON.stringify(kidData.children)),at:new Date().toISOString()};
+  kSaveSync(); kFlushProfile();
+}
+async function kFlushProfile(){
+  if(!state.url||!kidSync.profilePending||kProfileFlushing||kidSync.unsupported) return false;
+  kProfileFlushing=true;
+  const shot=kidSync.profilePending;
+  try{
+    const r=await api('saveKidsProfile',{children:shot.children});
+    if(!r||r.ok===false) throw new Error((r&&r.error)||'아이 프로필을 저장하지 못했습니다.');
+    if(kidSync.profilePending===shot) kidSync.profilePending=null;
+    kidSync.profileKnown=(shot.children||[]).map(function(c){ return String(c.id); });
+    kSaveSync(); setSyncInfo();
+    return true;
+  }catch(err){
+    const msg=String((err&&err.message)||'');
+    if(/알 수 없는 요청/.test(msg)){ kidSync.unsupported=true; kSaveSync(); }
+    else if(/예전 버전/.test(msg)){ kidSync.profilePending=null; kSaveSync(); }
+    setSyncInfo();
+    return false;
+  }finally{ kProfileFlushing=false; }
+}
+function kRenameKid(id,name){
+  const c=kKidById(id); if(!c) return;
+  const v=String(name||'').trim().slice(0,10);
+  if(!v||v===c.name) return;
+  c.name=v; c.updatedAt=new Date().toISOString();
+  kSaveLocal(); kQueueProfile(); renderAll();
+}
+/** 시트에서 읽은 육아 프로필을 이 기기에 반영합니다. */
+function kApplyProfile(remote){
+  if(!Array.isArray(remote)||!remote.length) return false;
+  if(kidSync.profilePending) return false;
+  const rem=remote.filter(function(c){ return c&&c.id; }).slice(0,4).map(kNormKid);
+  const local=kidData.children||[];
+  const localById=new Map(local.map(function(c){ return [String(c.id),c]; }));
+  const remIds=new Set(rem.map(function(c){ return String(c.id); }));
+  const known=new Set((kidSync.profileKnown||[]).map(String));
+  const out=[];
+  rem.forEach(function(rc){
+    const lc=localById.get(String(rc.id));
+    if(!lc){ out.push(rc); return; }
+    out.push(kTs(rc)>kTs(lc)?rc:lc);
+  });
+  local.forEach(function(lc){ if(!remIds.has(String(lc.id))&&!known.has(String(lc.id))) out.push(lc); });
+  kidSync.profileKnown=Array.from(remIds); kSaveSync();
+  const changed=JSON.stringify(local)!==JSON.stringify(out);
+  if(changed) kidData.children=out;
+  if(JSON.stringify(out)!==JSON.stringify(rem)) kQueueProfile();
+  if(changed) kSaveLocal();
+  return changed;
+}
+/** 시트에서 읽은 육아 일정을 이 기기에 반영합니다. */
+function kApplyRemote(kids){
+  if(!kids||typeof kids!=='object'){ kidSync.noKidsTab=!!state.url; return false; }
+  kidSync.noKidsTab=false;
+  let changed=kApplyProfile(kids.children);
+  if(!Array.isArray(kids.children)||!kids.children.length){
+    /* 시트에 아직 아이 프로필이 없습니다 → 이 기기 이름으로 시작합니다. */
+    if(!kidSync.profilePending) kQueueProfile();
+  }
+  if(!Array.isArray(kids.events)){ kidSync.unsupported=true; kSaveSync(); return changed; }
+  const ids=kidData.children.map(function(c){ return c.id; });
+  const remote=kids.events.map(function(e){ return kNormEvent(e,ids); }).filter(Boolean);
+
+  if(!remote.length&&kidData.events.length&&!Object.keys(kidPending).length){
+    const knownNow=new Set(kidSync.known.map(String));
+    const allKnown=kidData.events.every(function(ev){ return knownNow.has(String(ev.id)); });
+    if(!kidSync.seen&&!allKnown){
+      /* 시트에 아직 육아 일정이 없습니다 → 이 기기 일정을 올려서 시작합니다. */
+      kidData.events.forEach(function(ev){ kidPending[ev.id]=ev; });
+      if(Object.keys(kidPending).length){ kSavePending(); kFlush(); }
+      if(!kidSync.profilePending) kQueueProfile();
+      return changed;
+    }
+    /* 이 기기가 시트에서 보던 일정만 남았는데 시트가 비었다면, 다른 기기에서 지운 것입니다.
+       시트에 아직 못 올린 이 기기 전용 일정이 있을 때만 두 번 확인해 지웁니다. */
+    if(!allKnown){
+      kidSync.strikes=(kidSync.strikes||0)+1; kSaveSync();
+      if(kidSync.strikes<2) return changed;
+    }
+  } else if(remote.length&&kidSync.strikes){ kidSync.strikes=0; kSaveSync(); }
+  if(remote.length) kidSync.seen=true;
+
+  const rIds=new Set(remote.map(function(e){ return String(e.id); }));
+  const localById=new Map(kidData.events.map(function(e){ return [String(e.id),e]; }));
+  const known=new Set(kidSync.known.map(String));
+  const out=[];
+  remote.forEach(function(r){
+    const id=String(r.id), item=kidPending[id];
+    if(item==='delete') return;
+    if(item){
+      if(String(item.updatedAt||'')>=String(r.updatedAt||'')){ out.push(item); return; }
+      delete kidPending[id]; kSavePending();
+    }
+    const lc=localById.get(id);
+    if(lc&&String(lc.updatedAt||'')>String(r.updatedAt||'')){ out.push(lc); return; }
+    out.push(r);
+  });
+  Object.keys(kidPending).forEach(function(id){
+    const item=kidPending[id];
+    if(item&&item!=='delete'&&!rIds.has(String(id))) out.push(item);
+  });
+  kidData.events.forEach(function(ev){
+    const id=String(ev.id);
+    if(rIds.has(id)||kidPending[id]||known.has(id)) return;
+    out.push(ev);
+  });
+  kidSync.known=Array.from(rIds); kSaveSync();
+  if(kSig(kidData.events)!==kSig(out)){ kidData.events=out; kSaveLocal(); changed=true; }
+  return changed;
+}
+
+/* ------------------------------------------------------------ 육아: 렌더 도구 */
+function kKidBadges(ev){
+  const ids=kKidsOf(ev);
+  if(kidData.children.length<=1) return '';
+  if(ids.length===kidData.children.length) return '<em class="kbadge">'+esc(ids.map(kKidName).join('·'))+'</em>';
+  return ids.map(function(id){ return '<em class="kbadge kc" style="--c:'+esc((kKidById(id)||{}).color||'#64748b')+'">'+esc(kKidName(id))+'</em>'; }).join('');
+}
+function kMeta(ev,o){
+  const bits=[];
+  if(ev.place) bits.push('📍 '+esc(ev.place));
+  if(ev.supplies&&ev.supplies.length) bits.push('🎒 준비물 '+ev.supplies.length);
+  if(ev.rrule) bits.push('🔁 반복');
+  if(o&&o.span) bits.push('~'+kLabel(o.endDate));
+  return bits.join(' · ');
+}
+function kHelloHTML(){
+  return '<div class="khello">'
+    +'<div class="kem">👶</div>'
+    +'<h2>아직 육아 일정이 없어요</h2>'
+    +'<p>아이들의 <b>준비물·행사·학원 시간표</b>를 한곳에 모아 두면<br>아침에 챙길 것과 가야 할 곳을 잊지 않습니다.</p>'
+    +'<div class="kgo"><button class="btn primary" data-kadd="'+kToday()+'">첫 일정 추가</button>'
+    +'<button class="btn text" id="kidHelloSettings">아이 이름 설정</button></div>'
+    +'<div class="kfeat">'
+    +'<div><b>오늘·내일 한눈에</b>가야 할 곳과 시간</div>'
+    +'<div><b>준비물 체크</b>일정에 적어 두고 홈에서 체크</div>'
+    +'<div><b>주간 시간표</b>학원·수업을 시간축에 그대로</div>'
+    +'<div><b>반복 일정</b>매주 월·목, 격주, 매월 — RRULE</div>'
+    +'</div></div>';
+}
+
+/* ------------------------------------------------------------ 육아: 필터 바 */
+function renderKidBar(){
+  const bar=$('#kidsBar'); if(!bar) return;
+  const kidsTab=(state.tab==='kidHome'||state.tab==='kidWeek');
+  bar.hidden=!kidsTab;
+  if(!kidsTab) return;
+  let h='<button class="kchip'+(kidFilter==='all'?' on':'')+'" data-kidfilter="all"><span class="kd" style="background:linear-gradient(120deg,#3B82F6,#F59E0B)"></span>전체</button>';
+  kidData.children.forEach(function(c){
+    h+='<button class="kchip'+(kidFilter===c.id?' on':'')+'" data-kidfilter="'+esc(c.id)+'"><span class="kd" style="background:'+esc(c.color)+'"></span>'+esc(c.name)+'</button>';
+  });
+  h+='<span class="kgrow"></span>';
+  h+='<button class="kadd" id="kidAddBtn">+ 일정 추가</button>';
+  h+='<button class="icon-btn sm" id="kidGear" aria-label="설정" title="설정">⚙</button>';
+  bar.innerHTML=h;
+}
+
+/* ------------------------------------------------------------ 육아: 홈 */
+function kDayCard(label,date,occ,isToday){
+  let h='<section class="kcard"><div class="kcard-h"><h2>'+label+'</h2><span class="ksub">'+kLabel(date)+' '+WD[parseYMD(date).getDay()]+'</span><span class="kright ksub">'+(occ.length?occ.length+'개':'없음')+'</span></div>';
+  if(!occ.length){
+    h+='<div class="ktem"><div class="kempty">일정이 없어요<button data-kadd="'+date+'">+ 추가</button></div></div>';
+  } else {
+    const nowM=kToVal(HM(new Date()));
+    h+='<div class="ktem">';
+    occ.forEach(function(o){
+      const ev=o.ev, cat=KCATS[ev.cat]||KCATS.etc;
+      const past=isToday&&!ev.allDay&&ev.end&&kToVal(ev.end)<nowM;
+      const ongoing=isToday&&!ev.allDay&&ev.start&&kToVal(ev.start)<=nowM&&(!ev.end||kToVal(ev.end)>=nowM);
+      h+='<button class="kitem'+(past?' past':'')+(ongoing?' now':'')+'" data-kev="'+esc(ev.id)+'" data-kdate="'+o.date+'">'
+        +'<span class="kbar" style="background:'+cat.color+'"></span>'
+        +'<span class="ktime">'+(ev.allDay?'종일':esc(ev.start)+(ev.end?'–'+esc(ev.end):''))+'</span>'
+        +'<span class="kmain"><span class="kti">'+esc(ev.title)+kKidBadges(ev)+'</span>'
+        +'<span class="kmeta">'+kMeta(ev,o)+'</span></span></button>';
+    });
+    h+='</div>';
+  }
+  return h+'</section>';
+}
+function renderKidHome(){
+  const el=$('#kidHome'); if(!el) return;
+  if(!kidData.events.length){ el.innerHTML=kHelloHTML(); return; }
+  const today=kToday(), tomorrow=kAdd(today,1);
+  const weekStart=kWeekStart(today), weekEnd=kAdd(weekStart,6);
+  const todayOcc=kOcc(today,today), tomorrowOcc=kOcc(tomorrow,tomorrow);
+  const weekOcc=kOcc(weekStart,weekEnd);
+
+  /* 이번 주 스트립 */
+  let strip='<div class="kstrip">';
+  for(let i=0;i<7;i++){
+    const d=kAdd(weekStart,i), dw=parseYMD(d).getDay();
+    const occ=kOcc(d,d);
+    const seen={}, dots=[];
+    occ.forEach(function(o){
+      kKidsOf(o.ev).forEach(function(id){ if(seen[id]) return; seen[id]=1; dots.push('<i style="background:'+esc((kKidById(id)||{}).color||'#64748b')+'"></i>'); });
+    });
+    let lines='';
+    occ.slice(0,2).forEach(function(o){ lines+='<span class="kdl">'+esc(o.ev.title)+'</span>'; });
+    strip+='<button class="kday'+(d===today?' today':'')+(dw===0?' sun':'')+'" data-kday="'+d+'">'
+      +'<span class="kwd">'+WD[dw]+'</span><span class="kdn">'+(+d.slice(8,10))+'</span>'
+      +'<span class="kdots">'+dots.join('')+'</span>'+lines+'</button>';
+  }
+  strip+='</div>';
+
+  /* 준비물: 오늘~모레, 일정마다 가장 가까운 날 한 번만 */
+  const groups=[];
+  kOcc(today,kAdd(today,2)).forEach(function(o){
+    if(!o.ev.supplies.length) return;
+    for(let g=0;g<groups.length;g++) if(groups[g].ev.id===o.ev.id) return;
+    groups.push({ev:o.ev,date:o.date});
+  });
+  let supLeft=0, supTotal=0;
+  groups.forEach(function(g){ const st=kSupStats(g.ev,g.date); supTotal+=st.total; supLeft+=st.left; });
+
+  let sup='<section class="kcard"><div class="kcard-h"><h2>준비물 체크</h2><span class="ksub">오늘~모레</span>'
+    +'<span class="kright"><span class="kbadge'+(supLeft?' kwarn':'')+'">'+(supTotal?(supLeft?supLeft+'개 남음':'모두 준비'):'없음')+'</span></span></div>';
+  if(!supTotal){
+    sup+='<div class="ktem"><div class="kempty">오늘부터 모레까지 준비물이 없어요.</div></div>';
+  } else {
+    groups.forEach(function(g){
+      const st=kSupStats(g.ev,g.date);
+      sup+='<div class="kgroup"><div class="kgroup-h"><span class="kd" style="width:8px;height:8px;border-radius:50%;background:'+kColorOf(g.ev)+'"></span><b>'+esc(g.ev.title)+'</b><span class="kwhen">'+(g.date===today?'오늘':kLabel(g.date))+'</span><span class="kpg'+(st.left===0?' done':'')+'">'+st.done+'/'+st.total+'</span></div>';
+      g.ev.supplies.forEach(function(s){
+        sup+='<button class="ksup'+(kSupDone(g.ev,s,g.date)?' on':'')+'" data-ksup="'+esc(g.ev.id)+'" data-ksdate="'+g.date+'" data-ksid="'+esc(s.id)+'">'
+          +'<span class="kcb">'+KCHECK+'</span><span class="ktx">'+esc(s.text)+'</span></button>';
+      });
+      sup+='</div>';
+    });
+  }
+  sup+='</section>';
+
+  /* 임박한 행사 */
+  let upOcc=[];
+  kOcc(kAdd(today,1),kAdd(today,45)).forEach(function(o){
+    if(!(o.ev.cat==='event'||o.ev.cat==='hospital'||o.span>0)) return;
+    for(let u=0;u<upOcc.length;u++) if(upOcc[u].ev.id===o.ev.id) return;
+    upOcc.push(o);
+  });
+  upOcc=upOcc.slice(0,5);
+  let up='<section class="kcard"><div class="kcard-h"><h2>임박한 행사</h2><span class="ksub">앞으로 45일</span></div>';
+  if(!upOcc.length){
+    up+='<div class="ktem"><div class="kempty">예정된 행사가 없어요.</div></div>';
+  } else {
+    up+='<div class="ktem">';
+    upOcc.forEach(function(o){
+      const n=kDiff(today,o.date);
+      up+='<button class="kup" data-kev="'+esc(o.ev.id)+'" data-kdate="'+o.date+'">'
+        +'<span class="kdd'+(n<=3?' soon':'')+'"><b>'+(n===1?'내일':'D-'+n)+'</b>'+kLabel(o.date)+'</span>'
+        +'<span class="kum"><strong>'+esc(o.ev.title)+'</strong><span>'+esc((o.ev.allDay?'종일':o.ev.start)+(o.ev.place?' · '+o.ev.place:''))+'</span></span>'
+        +kKidBadges(o.ev)+'</button>';
+    });
+    up+='</div>';
+  }
+  up+='</section>';
+
+  el.innerHTML='<div class="kcard">'+strip
+    +'<div class="ksum"><span><b class="knum">'+todayOcc.length+'</b>오늘 일정</span><i></i>'
+    +'<span><b class="knum">'+weekOcc.length+'</b>이번 주</span><i></i>'
+    +'<span'+(supLeft?' class="kwarn"':'')+'><b class="knum">'+supLeft+'</b>준비물 남음</span></div></div>'
+    +'<div class="kp-grid"><div class="kp-col">'
+    +kDayCard('오늘',today,todayOcc,true)+kDayCard('내일',tomorrow,tomorrowOcc,false)
+    +'</div><div class="kp-col">'+sup+up+'</div></div>';
+}
+
+/* ------------------------------------------------------------ 육아: 주간 시간표 */
+function renderKidWeek(){
+  const el=$('#kidWeek'); if(!el) return;
+  if(!kidWeekStart) kidWeekStart=kWeekStart(kToday());
+  const ws=kidWeekStart, we=kAdd(ws,6);
+  const occ=kOcc(ws,we);
+  let minH=8, maxH=21;
+  occ.forEach(function(o){
+    if(o.ev.allDay||!o.ev.start) return;
+    const s=kToVal(o.ev.start), e=o.ev.end?kToVal(o.ev.end):s+60;
+    if(Math.floor(s/60)<minH) minH=Math.max(0,Math.floor(s/60));
+    if(Math.ceil(e/60)>maxH) maxH=Math.min(24,Math.ceil(e/60));
+  });
+  const totalH=(maxH-minH)*KH;
+  const today=kToday();
+  let h='<div class="kw-head"><button class="icon-btn sm" data-kweek="-1" aria-label="이전 주"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>'
+    +'<span class="kw-range">'+kLabel(ws)+' – '+kLabel(we)+'</span>'
+    +'<button class="icon-btn sm" data-kweek="1" aria-label="다음 주"><svg viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></button>'
+    +'<span class="kgrow"></span><button class="btn text sm" data-kweek="0">이번 주</button></div>';
+  h+='<div class="kw-scroll"><div class="kwhint">빈 곳을 누르면 그 날 일정을 추가합니다 · 칸을 누르면 수정</div>';
+  h+='<div class="kwg kw-headrow"><div></div>';
+  for(let i=0;i<7;i++){
+    const d=kAdd(ws,i), dw=parseYMD(d).getDay();
+    h+='<button class="khcell'+(d===today?' today':'')+(dw===0?' sun':'')+'" data-khead="'+d+'"><i>'+WD[dw]+'</i><b>'+(+d.slice(8,10))+'</b></button>';
+  }
+  h+='</div>';
+
+  const allDayOcc=occ.filter(function(o){ return o.ev.allDay||!o.ev.start; });
+  if(allDayOcc.length){
+    h+='<div class="kwg kwallday"><div class="klbl">종일</div>';
+    for(let a=0;a<7;a++){
+      const da=kAdd(ws,a);
+      const list=allDayOcc.filter(function(o){ return o.date===da||(o.date<=da&&o.endDate>=da); });
+      h+='<div class="kacell">'+list.slice(0,3).map(function(o){
+        return '<button class="kachip" style="background:'+kColorOf(o.ev)+'" data-kev="'+esc(o.ev.id)+'" data-kdate="'+o.date+'">'+esc(o.ev.title)+'</button>';
+      }).join('')+(list.length>3?'<span class="kbadge">+'+(list.length-3)+'</span>':'')+'</div>';
+    }
+    h+='</div>';
+  }
+
+  h+='<div class="kwg kwbody" style="height:'+totalH+'px"><div class="ktimes">';
+  for(let hr=minH;hr<maxH;hr++) h+='<span class="khl" style="top:'+((hr-minH)*KH)+'px'+(hr===minH?';transform:none':'')+'">'+pad(hr)+':00</span>';
+  h+='</div>';
+  for(let c=0;c<7;c++){
+    const d=kAdd(ws,c), dw=parseYMD(d).getDay();
+    const dayOcc=occ.filter(function(o){ return o.date===d||(o.date<=d&&o.endDate>=d); });
+    const bars=[];
+    dayOcc.forEach(function(o){
+      if(o.ev.allDay||!o.ev.start) return;
+      let s=kToVal(o.ev.start), e=o.ev.end?kToVal(o.ev.end):s+60;
+      if(e<=s) e=s+30;
+      if(o.date<d) s=minH*60;
+      if(o.endDate>d) e=maxH*60;
+      bars.push({o:o,s:s,e:e});
+    });
+    bars.sort(function(a,b){ return a.s-b.s||b.e-a.e; });
+    const colEnds=[];
+    bars.forEach(function(b){
+      let placed=false;
+      for(let k=0;k<colEnds.length;k++){ if(colEnds[k]<=b.s){ colEnds[k]=b.e; b.col=k; placed=true; break; } }
+      if(!placed){ b.col=colEnds.length; colEnds.push(b.e); }
+    });
+    const ncol=Math.max(1,colEnds.length);
+    h+='<div class="kcol'+(d===today?' today':'')+(dw===0?' sun':'')+'" data-kcol="'+d+'">';
+    for(let hr=minH;hr<maxH;hr++){
+      h+='<div class="kline" style="top:'+((hr-minH)*KH)+'px"></div>';
+      h+='<div class="kline half" style="top:'+((hr-minH)*KH+KH/2)+'px"></div>';
+    }
+    bars.forEach(function(b){
+      const top=(b.s-minH*60)/60*KH, hgt=Math.max(19,(b.e-b.s)/60*KH-2);
+      const w=100/ncol, left=b.col*w;
+      h+='<button class="kblk'+(hgt<32?' tiny':'')+'" data-kev="'+esc(b.o.ev.id)+'" data-kdate="'+b.o.date+'" style="--c:'+kColorOf(b.o.ev)+';background:'+kColorOf(b.o.ev)+';top:'+top+'px;height:'+hgt+'px;left:calc('+left+'% + 1px);width:calc('+w+'% - 2px)">'
+        +'<b>'+esc(b.o.ev.title)+'</b><span>'+esc(b.o.ev.start)+(b.o.ev.place?' · '+esc(b.o.ev.place):'')+'</span></button>';
+    });
+    if(d===today){
+      const nm=kToVal(HM(new Date()));
+      if(nm>=minH*60&&nm<=maxH*60) h+='<div class="know" style="top:'+((nm-minH*60)/60*KH)+'px"></div>';
+    }
+    h+='</div>';
+  }
+  h+='</div></div>';
+  el.innerHTML=h;
+}
+
+/* ------------------------------------------------------------ 육아: 일정 편집 */
+function kRepType(rule){
+  if(!rule.freq) return 'none';
+  if(rule.freq==='WEEKLY') return rule.interval===2?'biweekly':'weekly';
+  if(rule.freq==='DAILY') return 'daily';
+  if(rule.freq==='MONTHLY') return 'monthly';
+  return 'yearly';
+}
+function kSyncRepFields(){
+  const v=$('#kRep').value, et=$('#kEndType').value;
+  $('#kDowWrap').hidden=!(v==='weekly'||v==='biweekly');
+  $('#kEndWrap').hidden=(v==='none');
+  $('#kUntil').hidden=et!=='until';
+  $('#kCount').hidden=et!=='count';
+  kRepHint();
+}
+function kRepHint(){
+  const v=$('#kRep').value;
+  if(v==='none'){ $('#kRepHint').textContent=''; return; }
+  const days=$$('#kDow [data-kd].on').map(function(b){ return b.dataset.kd; });
+  let t={daily:'매일',weekly:'매주',biweekly:'2주마다',monthly:'매월',yearly:'매년'}[v]||'';
+  if(v==='weekly'||v==='biweekly') t+=' '+days.map(function(d){ return WD[KBYDAY.indexOf(d)]; }).join('·');
+  const et=$('#kEndType').value;
+  if(et==='until'&&$('#kUntil').value) t+=' · '+$('#kUntil').value+'까지';
+  if(et==='count') t+=' · '+(parseInt($('#kCount').value,10)||0)+'회';
+  $('#kRepHint').textContent='구글 캘린더 형식으로 저장됩니다: '+t;
+}
+function renderKidsSupList(){
+  const box=$('#kSupList'); if(!box||!kidEditing) return;
+  const list=kidEditing.draft.supplies||[];
+  if(!list.length){ box.innerHTML='<p class="hint khint">준비물을 적어 두면 육아 홈에서 체크할 수 있어요.</p>'; return; }
+  box.innerHTML=list.map(function(s,i){
+    return '<div class="ksupedit"><span>'+esc(s.text)+'</span><button type="button" data-krm="'+i+'" aria-label="삭제"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button></div>';
+  }).join('');
+  $$('#kSupList [data-krm]').forEach(function(b){
+    b.addEventListener('click',function(){ kidEditing.draft.supplies.splice(+b.dataset.krm,1); renderKidsSupList(); });
+  });
+}
+function kAddSup(){
+  if(!kidEditing) return;
+  const inp=$('#kSupInput'), t=inp.value.trim();
+  if(!t) return;
+  kidEditing.draft.supplies.push({id:uid(),text:t,done:{}});
+  inp.value=''; renderKidsSupList(); inp.focus();
+}
+function openKidModal(evId, presetDate, presetTime){
+  const ev=evId?kidData.events.find(function(e){ return e.id===evId; }):null;
+  const isNew=!ev;
+  const date=(presetDate&&/^\d{4}-\d{2}-\d{2}$/.test(presetDate))?presetDate:(ev?ev.date:kToday());
+  const draft=ev?JSON.parse(JSON.stringify(ev)):{
+    id:'',title:'',childIds:(kidFilter==='all'?kidData.children.map(function(c){ return c.id; }):[kidFilter]),
+    cat:'academy',date:date,endDate:'',allDay:false,start:presetTime||'16:00',end:'',place:'',memo:'',supplies:[],rrule:'',exdates:[],createdAt:'',updatedAt:''
+  };
+  if(!draft.id&&!draft.end){ draft.end=addMin(draft.start||'16:00',90); }
+  kidEditing={draft:draft,isNew:isNew,occDate:(presetDate||draft.date)};
+  $('#kHead').textContent=isNew?'육아 일정 추가':'육아 일정 수정';
+  $('#kTitle').value=draft.title||'';
+  $('#kKidsWrap').innerHTML=kidData.children.map(function(c){
+    const on=(draft.childIds||[]).indexOf(c.id)>=0;
+    return '<button type="button" class="kchip'+(on?' on':'')+'" data-kk="'+esc(c.id)+'"><span class="kd" style="background:'+esc(c.color)+'"></span>'+esc(c.name)+'</button>';
+  }).join('');
+  $('#kCat').innerHTML=Object.keys(KCATS).map(function(k){
+    return '<option value="'+k+'"'+(draft.cat===k?' selected':'')+'>'+KCATS[k].label+'</option>';
+  }).join('');
+  $('#kDate').value=draft.date||kToday();
+  $('#kEndDate').value=draft.endDate||'';
+  $('#kAllDay').checked=!!draft.allDay;
+  $('#kStart').value=draft.start||'16:00';
+  $('#kEnd').value=draft.end||'';
+  $('#kPlace').value=draft.place||'';
+  $('#kMemo').value=draft.memo||'';
+  const rule=kParseRRule(draft.rrule);
+  const rt=kRepType(rule);
+  $('#kRep').value=rt;
+  const days=rule.byday.length?rule.byday:[KBYDAY[parseYMD(draft.date||kToday()).getDay()]];
+  $('#kDow').innerHTML=[0,1,2,3,4,5,6].map(function(i){
+    return '<button type="button" class="kchip'+(days.indexOf(KBYDAY[i])>=0?' on':'')+'" data-kd="'+KBYDAY[i]+'">'+WD[i]+'</button>';
+  }).join('');
+  $('#kEndType').value=rule.count?'count':(rule.until?'until':'never');
+  $('#kUntil').value=rule.until?(rule.until.slice(0,4)+'-'+rule.until.slice(4,6)+'-'+rule.until.slice(6,8)):kAdd(draft.date||kToday(),90);
+  $('#kCount').value=rule.count||12;
+  $('#kTimes').hidden=!!draft.allDay;
+  renderKidsSupList();
+  const repeating=!!draft.rrule;
+  $('#kSkipWrap').hidden=!(repeating&&!isNew);
+  $('#kSkipLabel').textContent=(repeating&&!isNew)?(kLabel(kidEditing.occDate)+' '+WD[parseYMD(kidEditing.occDate).getDay()]+'요일만 뺍니다'):'';
+  $('#kDel').hidden=isNew;
+  kSyncRepFields();
+  closeQuickAdd(); closePop();
+  show($('#kModal'));
+  setTimeout(function(){ if(!$('#kTitle').value) $('#kTitle').focus(); },40);
+}
+function kCloseModal(){ hide($('#kModal')); kidEditing=null; }
+function kUpsert(ev){
+  const i=kidData.events.findIndex(function(x){ return x.id===ev.id; });
+  if(i>=0) kidData.events[i]=ev; else kidData.events.push(ev);
+  kSaveLocal(); kQueue(ev); renderAll();
+}
+function kSaveModal(){
+  if(!kidEditing) return;
+  const d=kidEditing.draft;
+  const title=$('#kTitle').value.trim();
+  if(!title){ toast('무엇인지 적어 주세요'); $('#kTitle').focus(); return; }
+  const date=$('#kDate').value||kToday();
+  let endDate=$('#kEndDate').value||'';
+  if(endDate&&endDate<date) endDate='';
+  const allDay=$('#kAllDay').checked;
+  const start=allDay?'':($('#kStart').value||'09:00');
+  const end=allDay?'':($('#kEnd').value||'');
+  if(!allDay&&end&&kToVal(end)<=kToVal(start)){ toast('끝 시간이 시작보다 빠릅니다'); return; }
+  const childIds=$$('#kKidsWrap [data-kk].on').map(function(b){ return b.dataset.kk; });
+  const repV=$('#kRep').value;
+  let rrule='';
+  if(repV!=='none'){
+    rrule=kBuildRRule({freq:{daily:'DAILY',weekly:'WEEKLY',biweekly:'WEEKLY',monthly:'MONTHLY',yearly:'YEARLY'}[repV],
+      interval:repV==='biweekly'?2:1,
+      byday:(repV==='weekly'||repV==='biweekly')?$$('#kDow [data-kd].on').map(function(b){ return b.dataset.kd; }):[],
+      endType:$('#kEndType').value,until:$('#kUntil').value,count:parseInt($('#kCount').value,10)||0});
+  }
+  const ev={
+    id:d.id||uid(), title:title,
+    childIds:childIds.length?childIds:kidData.children.map(function(c){ return c.id; }),
+    cat:$('#kCat').value||'etc', date:date, endDate:endDate, allDay:allDay,
+    start:start, end:end,
+    place:$('#kPlace').value.trim(), memo:$('#kMemo').value.trim(),
+    supplies:(d.supplies||[]).slice(), rrule:rrule, exdates:(d.exdates||[]).slice(),
+    createdAt:d.createdAt||new Date().toISOString(), updatedAt:new Date().toISOString()
+  };
+  const wasNew=kidEditing.isNew;
+  kUpsert(ev);
+  kCloseModal();
+  toast(wasNew?'육아 일정을 추가했어요':'육아 일정을 저장했어요');
+}
+function kDeleteModal(){
+  if(!kidEditing||kidEditing.isNew) return;
+  const ev=kidEditing.draft;
+  confirmDialog({title:'육아 일정 삭제',body:'"'+(ev.title||'(제목 없음)')+'" 일정을 삭제할까요?'+((ev.rrule)?'\n\n반복 일정이라 시리즈 전체가 삭제됩니다.':''),okText:'삭제',danger:true}).then(function(ok){
+    if(!ok) return;
+    kidData.events=kidData.events.filter(function(x){ return x.id!==ev.id; });
+    kSaveLocal(); kQueueDelete(ev.id); kCloseModal(); renderAll(); toast('삭제했어요');
+  });
+}
+function kSkipOne(){
+  if(!kidEditing||kidEditing.isNew) return;
+  const id=kidEditing.draft.id, occ=kidEditing.occDate;
+  const target=kidData.events.find(function(e){ return e.id===id; });
+  if(!target) return;
+  target.exdates=target.exdates||[];
+  if(target.exdates.indexOf(occ)<0) target.exdates.push(occ);
+  target.updatedAt=new Date().toISOString();
+  kSaveLocal(); kQueue(target); kCloseModal(); renderAll();
+  toast(kLabel(occ)+' '+WD[parseYMD(occ).getDay()]+'요일만 건너뛰었어요');
+}
+function kToggleSup(evId,date,sid){
+  const ev=kidData.events.find(function(e){ return e.id===evId; }); if(!ev) return;
+  ev.supplies.forEach(function(s){
+    if(s.id!==sid) return;
+    if(!s.done) s.done={};
+    if(s.done[date]) delete s.done[date]; else s.done[date]=true;
+  });
+  ev.updatedAt=new Date().toISOString();
+  kSaveLocal(); kQueue(ev);
+  if(state.tab==='kidHome') renderKidHome(); else renderAll();
+}
+
+/* ------------------------------------------------------------ 육아: 설정 도우미 */
+function kKidsInfoText(){
+  let s='육아 일정 '+kidData.events.length+'개 · 아이 '+kidData.children.length+'명';
+  if(!state.url) return s+' · 이 기기에만 저장';
+  if(kidSync.noKidsTab||kidSync.unsupported) return s+' · 시트에 육아 저장 탭이 없습니다 — 새 Code.gs(1.1.0)로 다시 배포해 주세요';
+  const p=Object.keys(kidPending).length;
+  const pp=kidSync.profilePending?1:0;
+  return s+(p||pp?' · 못 올린 변경 '+(p+pp)+'건':' · 시트와 같음');
+}
+function renderKidsSettings(){
+  const box=$('#setKids'); if(!box) return;
+  box.innerHTML=kidData.children.map(function(c){
+    return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#5f6368"><i style="width:10px;height:10px;border-radius:50%;background:'+esc(c.color)+';display:inline-block"></i>'
+      +'<input type="text" data-kidname="'+esc(c.id)+'" value="'+esc(c.name)+'" maxlength="10" style="width:100px;border:1px solid var(--line2);border-radius:4px;padding:5px 7px;font-size:13px"></label>';
+  }).join('');
+  $$('#setKids [data-kidname]').forEach(function(inp){
+    inp.addEventListener('change',function(){
+      const v=inp.value.trim();
+      const c=kKidById(inp.dataset.kidname);
+      if(!v){ if(c) inp.value=c.name; return; }
+      kRenameKid(inp.dataset.kidname,v);
+    });
+  });
+  const info=$('#setKidsInfo'); if(info) info.textContent=kKidsInfoText();
+}
+function kExportJSON(){
+  const blob=new Blob([JSON.stringify({app:'personal-calendar',kind:'kids',version:'1.2.0',exportedAt:new Date().toISOString(),children:kidData.children,events:kidData.events},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='육아일정-'+YMD(new Date())+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); },3000);
+}
+function kImportJSON(file){
+  const r=new FileReader();
+  r.onload=function(){
+    try{
+      let d=JSON.parse(r.result);
+      if(d&&d.data&&Array.isArray(d.data.events)) d=d.data;
+      if(!d||!Array.isArray(d.events)) throw new Error('육아 일정 형식이 아니에요');
+      const kids=kNormKids(d.children);
+      const ids=kids.map(function(c){ return c.id; });
+      const evs=d.events.map(function(e){ return kNormEvent(e,ids); }).filter(Boolean);
+      confirmDialog({title:'육아 일정 가져오기',body:'육아 일정 '+evs.length+'개로 이 기기의 육아 일정('+kidData.events.length+'개)을 바꿉니다.'+(state.url?'\n연결된 시트에도 반영됩니다.':''),okText:'가져오기'}).then(function(ok){
+        if(!ok) return;
+        kidData.children=kids; kidData.events=evs;
+        kidPending={};
+        kidData.events.forEach(function(e){ kidPending[e.id]=e; });
+        kSaveLocal(); kSavePending(); kQueueProfile(); kFlush(); renderAll(); renderKidsSettings();
+        toast('육아 일정을 가져왔어요');
+      });
+    }catch(err){ toast('가져오지 못했어요 — '+((err&&err.message)||'')); }
+  };
+  r.readAsText(file);
+}
+
+/* ------------------------------------------------------------ 육아: 이벤트 연결 */
+function bindKids(){
+  document.addEventListener('click',function(e){
+    const tab=e.target.closest('#tabBar [data-tab]');
+    if(tab){ setTab(tab.dataset.tab); return; }
+    const f=e.target.closest('[data-kidfilter]');
+    if(f){ kidFilter=f.dataset.kidfilter; try{ localStorage.setItem(KLS.filter,kidFilter); }catch(err){} renderAll(); return; }
+    if(e.target.closest('#kidAddBtn')){ openKidModal(null,(state.tab==='kidWeek'&&kidWeekStart)?kidWeekStart:kToday()); return; }
+    if(e.target.closest('#kidGear')||e.target.closest('#kidHelloSettings')){ openSettings(); return; }
+    const add=e.target.closest('[data-kadd]');
+    if(add){ openKidModal(null,add.dataset.kadd); return; }
+    const kev=e.target.closest('[data-kev]');
+    if(kev){ openKidModal(kev.dataset.kev,kev.dataset.kdate||null); return; }
+    const sup=e.target.closest('[data-ksup]');
+    if(sup){ kToggleSup(sup.dataset.ksup,sup.dataset.ksdate,sup.dataset.ksid); return; }
+    const wk=e.target.closest('[data-kweek]');
+    if(wk){
+      const n=+wk.dataset.kweek;
+      if(n===0) kidWeekStart=kWeekStart(kToday());
+      else kidWeekStart=kAdd(kidWeekStart||kWeekStart(kToday()),7*n);
+      renderKidWeek(); return;
+    }
+    const kd=e.target.closest('[data-kday]');
+    if(kd){ kidWeekStart=kWeekStart(kd.dataset.kday); setTab('kidWeek'); return; }
+    const kh=e.target.closest('[data-khead]');
+    if(kh){ openKidModal(null,kh.dataset.khead); return; }
+    const col=e.target.closest('[data-kcol]');
+    if(col&&!e.target.closest('.kblk')){
+      const rect=col.getBoundingClientRect();
+      const mins=Math.max(0,Math.min(1425,Math.round((e.clientY-rect.top)/KH*60/30)*30));
+      openKidModal(null,col.dataset.kcol,pad(Math.floor(mins/60))+':'+pad(mins%60));
+      return;
+    }
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&!$('#kModal').hidden) kCloseModal();
+  });
+  $('#kClose').addEventListener('click',kCloseModal);
+  $('#kCancel').addEventListener('click',kCloseModal);
+  $('#kSave').addEventListener('click',kSaveModal);
+  $('#kDel').addEventListener('click',kDeleteModal);
+  $('#kSkip').addEventListener('click',kSkipOne);
+  $('#kSupAdd').addEventListener('click',kAddSup);
+  $('#kSupInput').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); kAddSup(); } });
+  $('#kAllDay').addEventListener('change',function(){ $('#kTimes').hidden=$('#kAllDay').checked; });
+  $('#kRep').addEventListener('change',kSyncRepFields);
+  $('#kEndType').addEventListener('change',kSyncRepFields);
+  $('#kUntil').addEventListener('change',kRepHint);
+  $('#kCount').addEventListener('input',kRepHint);
+  $('#kKidsWrap').addEventListener('click',function(e){
+    const b=e.target.closest('[data-kk]'); if(!b) return;
+    const on=$$('#kKidsWrap [data-kk].on');
+    if(on.length>=kidData.children.length){ $$('#kKidsWrap [data-kk]').forEach(function(x){ x.classList.toggle('on',x===b); }); return; }
+    if(on.length===1&&on[0]===b) return;
+    b.classList.toggle('on');
+  });
+  $('#kDow').addEventListener('click',function(e){
+    const b=e.target.closest('[data-kd]'); if(!b) return;
+    const on=$$('#kDow [data-kd].on');
+    if(b.classList.contains('on')){ if(on.length<=1) return; b.classList.remove('on'); }
+    else b.classList.add('on');
+    kRepHint();
+  });
+  $('#setKidsSync').addEventListener('click',function(){
+    if(!state.url){ setMsg('먼저 시트를 연결해 주세요.'); return; }
+    kidSync.unsupported=false; kSaveSync();
+    kidFlushProfile().then(kFlush).then(function(){ return refreshFromRemote({force:true}); }).then(function(){ renderKidsSettings(); toast('육아 데이터를 맞췄어요'); });
+  });
+  $('#setKidsExport').addEventListener('click',kExportJSON);
+  $('#setKidsImport').addEventListener('click',function(){ $('#kidsImportFile').click(); });
+  $('#kidsImportFile').addEventListener('change',function(e){ const f=e.target.files[0]; if(f) kImportJSON(f); e.target.value=''; });
+}
+function setTab(t){
+  if(t!=='kidHome'&&t!=='kidWeek'&&t!=='cal') t='cal';
+  state.tab=t;
+  try{ localStorage.setItem(KLS.tab,t); }catch(e){}
+  closeQuickAdd(); closePop(); closeMenus(); closeDrawer();
+  state._timeAnchor='';
+  renderAll();
+}
+
 /* ------------------------------------------------------------ 이벤트 연결 */
 function bind(){
   $('#menuBtn').addEventListener('click',()=>{ document.body.classList.contains('drawer-open')?closeDrawer():openDrawer(); });
@@ -2316,7 +3557,7 @@ function bind(){
   $('#nextBtn').addEventListener('click',()=>go(1));
   $('#viewBtn').addEventListener('click',openViewMenu);
   $('#createBtn').addEventListener('click',()=>{ closeDrawer(); openModal({}); });
-  $('#fab').addEventListener('click',()=>openModal({}));
+  $('#fab').addEventListener('click',()=>{ if(state.tab==='cal') openModal({}); else openKidModal(null,kToday()); });
   $('#addCalBtn').addEventListener('click',()=>openCalModal());
   $('#miniPrev').addEventListener('click',()=>{ state.miniCursor=addMonths(state.miniCursor,-1); renderMini(); });
   $('#miniNext').addEventListener('click',()=>{ state.miniCursor=addMonths(state.miniCursor,1); renderMini(); });
@@ -2464,12 +3705,14 @@ function bind(){
       if(!$('#modal').hidden){ closeModal(); return; }
       if(!$('#calModal').hidden){ hide($('#calModal')); return; }
       if(!$('#settings').hidden){ hide($('#settings')); return; }
+      if(!$('#kModal').hidden){ kCloseModal(); return; }
       if(!$('#searchPanel').hidden){ hideSearch(); return; }
       closeMenus();
       return;
     }
     if(typing) return;
-    if(!$('#modal').hidden||!$('#calModal').hidden||!$('#settings').hidden) return;
+    if(!$('#modal').hidden||!$('#calModal').hidden||!$('#settings').hidden||!$('#kModal').hidden) return;
+    if(state.tab!=='cal'){ if(e.key.toLowerCase()==='n'){ e.preventDefault(); openKidModal(null,kToday()); } return; }
     const k=e.key.toLowerCase();
     if(k==='t'){ goToday(); }
     else if(k==='m'){ setView('month'); }
@@ -2497,7 +3740,8 @@ function bind(){
   window.addEventListener('resize',debounce(()=>{
     if($('#topbar').classList.contains('search-open') && innerWidth>768) $('#topbar').classList.remove('search-open');
     renderHeader();
-    if(state.view==='month') renderMonth();
+    if(state.tab==='cal' && state.view==='month') renderMonth();
+    else if(state.tab==='kidWeek') renderKidWeek();
   },160));
 
   setInterval(()=>{
@@ -2546,6 +3790,7 @@ function showHelp(){
 function init(){
   loadLocal();
   loadSyncStore();
+  kLoadLocal();
   const qs=new URLSearchParams(location.search);
   const hashUrl=readHash();
   if(hashUrl){
@@ -2560,15 +3805,20 @@ function init(){
   if(qs.get('d')){ const d=parseYMD(qs.get('d')); if(!isNaN(d.getTime())){ state.cursor=d; state.miniCursor=new Date(d.getFullYear(),d.getMonth(),1); } }
   if(qs.get('view')){ const v=qs.get('view'); if(['month','week','day','schedule'].indexOf(v)>=0) state.view=v; }
   state.miniCursor=new Date(state.cursor.getFullYear(),state.cursor.getMonth(),1);
+  state.tab=(function(){ try{ const t=localStorage.getItem(KLS.tab); return (t==='kidHome'||t==='kidWeek'||t==='cal')?t:'cal'; }catch(e){ return 'cal'; } })();
+  try{ kidFilter=localStorage.getItem(KLS.filter)||'all'; }catch(e){ kidFilter='all'; }
+  if(kidFilter!=='all' && !kidData.children.some(function(c){ return c.id===kidFilter; })) kidFilter='all';
+  kidWeekStart=kWeekStart(kToday());
   $('#setUrl').value=state.url;
   bind();
+  bindKids();
   setSync(state.url?'busy':'off');
   setStatus(state.url?'연결됨':'로컬');
   renderAll();
   setSyncInfo();
   if(state.url){
     startAutoSync();
-    flushCals().then(()=>flushPending()).then(()=>refreshFromRemote({force:true}));
+    flushCals().then(()=>flushPending()).then(()=>kFlushProfile()).then(()=>kFlush()).then(()=>refreshFromRemote({force:true}));
   }
 }
 

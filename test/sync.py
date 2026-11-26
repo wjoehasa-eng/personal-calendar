@@ -46,19 +46,24 @@ class Backend:
     def __init__(self):
         self.events = {}
         self.calendars = [dict(c) for c in CALS]
+        self.kids_children = []
+        self.kids_events = {}
         self.fail = False
         self.calls = []
         self.lock = threading.Lock()
 
-    def reset(self, events):
+    def reset(self, events, kids=None):
         self.events = {e["id"]: dict(e) for e in events}
         self.calendars = [dict(c) for c in CALS]
+        self.kids_children = [dict(c) for c in ((kids or {}).get("children") or [])]
+        self.kids_events = {e["id"]: dict(e) for e in ((kids or {}).get("events") or [])}
         self.fail = False
         self.calls = []
 
     def load(self):
-        return {"ok": True, "version": "1.0.0", "events": list(self.events.values()),
-                "calendars": self.calendars, "settings": {}}
+        return {"ok": True, "version": "1.1.0", "events": list(self.events.values()),
+                "calendars": self.calendars, "settings": {},
+                "kids": {"children": self.kids_children, "events": list(self.kids_events.values())}}
 
     def do(self, action, data):
         with self.lock:
@@ -104,6 +109,23 @@ class Backend:
                 return {"ok": True, "events": len(self.events)}
             if action == "exportToGoogleCalendar":
                 return {"ok": True, "googleId": "gid-mock", "calendar": "기본"}
+            if action == "saveKidsEvent":
+                e = data.get("event") or data
+                if not e.get("id"):
+                    return {"ok": False, "error": "육아 일정 ID가 없습니다."}
+                self.kids_events[e["id"]] = dict(e)
+                return {"ok": True, "id": e["id"]}
+            if action == "deleteKidsEvent":
+                self.kids_events.pop(data.get("id"), None)
+                return {"ok": True, "id": data.get("id")}
+            if action == "saveKidsProfile":
+                kids = data.get("children") or []
+                if not isinstance(kids, list) or not kids:
+                    return {"ok": False, "error": "아이 프로필 목록이 없습니다."}
+                if not any(c.get("updatedAt") for c in kids) and any(c.get("updatedAt") for c in self.kids_children):
+                    return {"ok": False, "error": "이 앱은 아이 프로필 수정시각을 보내지 않는 예전 버전입니다."}
+                self.kids_children = [dict(c) for c in kids]
+                return {"ok": True, "count": len(self.kids_children)}
             return {"ok": False, "error": "알 수 없는 요청: " + str(action)}
 
 
@@ -185,6 +207,31 @@ def cal_names(page):
 
 def cal_ids(page):
     return page.evaluate("JSON.parse(localStorage.getItem('pcal.cals.v1')||'[]').map(c=>c.id)")
+
+
+def kid_titles(page):
+    return page.evaluate("JSON.parse(localStorage.getItem('pcal.kids.events.v1')||'[]').map(e=>e.title)")
+
+
+def kid_names(page):
+    return page.evaluate("JSON.parse(localStorage.getItem('pcal.kids.kids.v1')||'[]').map(c=>c.name)")
+
+
+def kid_pending(page):
+    return page.evaluate("JSON.parse(localStorage.getItem('pcal.kids.pending.v1')||'{}')")
+
+
+def kid_add(page, title, date, start="16:00", end="17:30"):
+    page.click('#tabBar [data-tab="kidHome"]')
+    page.wait_for_timeout(250)
+    page.click("#kidAddBtn")
+    page.wait_for_timeout(300)
+    page.fill("#kTitle", title)
+    page.fill("#kDate", date)
+    page.fill("#kStart", start)
+    page.fill("#kEnd", end)
+    page.click("#kSave")
+    page.wait_for_timeout(600)
 
 
 def open_cal_editor(page, cal_id):
@@ -572,6 +619,89 @@ with sync_playwright() as pw:
     foreground(cal_ph)
     check("19_phone_added", wait_until(lambda: "아이들" in cal_names(cal_ph), timeout=20), str(cal_names(cal_ph)))
     cal_pc.screenshot(path=str(OUT / "04-pc-calendar-list.png"))
+
+    # ---------------------------------------------------------------- 20. 육아 일정 동기화 (PC → 휴대폰, 프로필, 오프라인)
+    cal_pc.close(); cal_pc_ctx.close(); cal_ph.close(); cal_ph_ctx.close()
+    BACK.reset([])
+    TODAY = __import__("datetime").date.today().isoformat()
+
+    k_ph_ctx = browser.new_context(service_workers="block", viewport={"width": 390, "height": 844}, is_mobile=True,
+                                   has_touch=True, locale="ko-KR", timezone_id="Asia/Seoul")
+    k_ph_ctx.route("https://script.google.com/**", mock_route)
+    kph = new_page(k_ph_ctx, "kidph")
+    k_pc_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900}, locale="ko-KR",
+                                   timezone_id="Asia/Seoul")
+    k_pc_ctx.route("https://script.google.com/**", mock_route)
+    kpc = new_page(k_pc_ctx, "kidpc")
+    check("20_profile_pushed_on_first_load",
+          wait_until(lambda: len(BACK.kids_children) == 2, timeout=15), str(BACK.kids_children))
+    check("20_default_names", [c["name"] for c in BACK.kids_children] == ["아이 1", "아이 2"],
+          str(BACK.kids_children))
+
+    kid_add(kpc, "태권도", TODAY)
+    check("20_sheet_has_kid_event",
+          wait_until(lambda: any(e.get("title") == "태권도" for e in BACK.kids_events.values()), timeout=15),
+          str(list(BACK.kids_events.values())))
+    check("20_phone_before_pull", "태권도" not in kid_titles(kph), f"titles={kid_titles(kph)}")
+    foreground(kph)
+    check("20_phone_picks_up_kid_event", wait_until(lambda: "태권도" in kid_titles(kph), timeout=15),
+          f"titles={kid_titles(kph)}")
+    kph.click('#tabBar [data-tab="kidHome"]')
+    kph.wait_for_timeout(400)
+    check("20_phone_renders_kid_home", "태권도" in kph.inner_text("#kidHome"), kph.inner_text("#kidHome")[:200])
+    kph.screenshot(path=str(OUT / "05-phone-kids-home.png"))
+
+    # 아이 이름 변경 → 시트 → 휴대폰
+    kpc.click("#settingsBtn")
+    kpc.wait_for_timeout(300)
+    kpc.fill('#setKids [data-kidname="kid1"]', "첫째")
+    kpc.locator('#setKids [data-kidname="kid1"]').press("Tab")
+    kpc.wait_for_timeout(500)
+    kpc.click("#setClose")
+    check("20_sheet_renamed",
+          wait_until(lambda: any(c["name"] == "첫째" for c in BACK.kids_children), timeout=20),
+          str(BACK.kids_children))
+    foreground(kph)
+    check("20_phone_gets_kid_name", wait_until(lambda: "첫째" in kid_names(kph), timeout=20), str(kid_names(kph)))
+    check("20_phone_kidsbar_name", wait_until(lambda: "첫째" in kph.inner_text("#kidsBar"), timeout=10),
+          kph.inner_text("#kidsBar"))
+    # 다시 동기화해도 이름이 되돌아가지 않는다
+    for _ in range(2):
+        kpc.evaluate("window.dispatchEvent(new Event('focus'))")
+        kpc.wait_for_timeout(900)
+        foreground(kph)
+    check("20_name_not_reverted", kid_names(kpc)[0] == "첫째" and "첫째" in kid_names(kph),
+          f"pc={kid_names(kpc)} ph={kid_names(kph)}")
+
+    # 휴대폰에서 삭제 → 시트·PC
+    kph.locator("#kidHome .kitem", has_text="태권도").first.click()
+    kph.wait_for_timeout(400)
+    kph.tap("#kDel")
+    kph.wait_for_timeout(350)
+    kph.tap("#cbOk")
+    check("20_sheet_kid_deleted",
+          wait_until(lambda: not any(e.get("title") == "태권도" for e in BACK.kids_events.values()), timeout=15),
+          str(list(BACK.kids_events.values())))
+    kpc.evaluate("window.dispatchEvent(new Event('focus'))")
+    check("20_pc_dropped_kid_event", wait_until(lambda: "태권도" not in kid_titles(kpc), timeout=15),
+          f"titles={kid_titles(kpc)}")
+
+    # 오프라인 육아 변경 → 대기열 → 복구 후 자동 전송
+    BACK.fail = True
+    kid_add(kpc, "오프라인 육아", TODAY, "09:00", "09:30")
+    check("20_kid_queued_offline", wait_until(lambda: len(kid_pending(kpc)) >= 1, timeout=10), str(kid_pending(kpc)))
+    check("20_kid_kept_local", "오프라인 육아" in kid_titles(kpc), f"titles={kid_titles(kpc)}")
+    BACK.fail = False
+    kpc.evaluate("window.dispatchEvent(new Event('focus'))")
+    check("20_kid_pending_flushed", wait_until(lambda: len(kid_pending(kpc)) == 0, timeout=15), str(kid_pending(kpc)))
+    check("20_sheet_has_offline_kid",
+          wait_until(lambda: any(e.get("title") == "오프라인 육아" for e in BACK.kids_events.values()), timeout=15),
+          str(list(BACK.kids_events.values())))
+    foreground(kph)
+    check("20_phone_gets_offline_kid", wait_until(lambda: "오프라인 육아" in kid_titles(kph), timeout=15),
+          f"titles={kid_titles(kph)}")
+    kpc.screenshot(path=str(OUT / "06-pc-kids-home.png"))
+    kpc.close(); k_pc_ctx.close(); kph.close(); k_ph_ctx.close()
 
     # ---------------------------------------------------------------- 13. 콘솔 오류
     check("14_no_console_errors", not errors, json.dumps(errors[:5], ensure_ascii=False))

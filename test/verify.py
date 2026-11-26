@@ -2,6 +2,8 @@
 내 캘린더 — 화면 동작 검증 (Playwright, 데스크톱 1440×900 / 휴대폰 390×844)
 ================================================================
 시트 연결 없이(이 브라우저 저장만으로) 화면 기능 전체를 확인합니다.
+· 개인 캘린더: 월간·주간·일간·일정 보기, 드래그, 공휴일, 구글 전송, 캘린더 관리
+· 육아: 전환 탭 3종, 육아 홈(오늘·내일·준비물·행사), 주간 시간표, 일정 편집, 아이 이름
 동기화(두 기기) 검증은 test/sync.py 를 보세요.
 
 실행:  python3 test/verify.py
@@ -57,6 +59,51 @@ SEED = [
     ev("e5", "주간 회의", ymd(4) + "T09:00", ymd(4) + "T09:30", repeat="weekly"),
     ev("e6", "병원 검진", ymd(8) + "T14:00", ymd(8) + "T15:00"),
 ]
+
+# ---------------------------------------------------------------- 육아
+KIDS = [
+    {"id": "kid1", "name": "아이 1", "color": "#3B82F6", "updatedAt": ""},
+    {"id": "kid2", "name": "아이 2", "color": "#F59E0B", "updatedAt": ""},
+]
+
+
+def kid_ev(eid, title, date, start="16:00", end="17:30", kids=("kid1",), cat="academy",
+           supplies=None, rrule="", allday=False, end_date=""):
+    return {
+        "id": eid, "title": title, "childIds": list(kids), "cat": cat, "date": date,
+        "endDate": end_date, "allDay": allday,
+        "start": "" if allday else start, "end": "" if allday else end,
+        "place": "", "memo": "",
+        "supplies": [{"id": "s-%s-%d" % (eid, i), "text": t, "done": {}} for i, t in enumerate(supplies or [])],
+        "rrule": rrule, "exdates": [],
+        "createdAt": "2026-11-01T00:00:00.000Z", "updatedAt": "2026-11-01T00:00:00.000Z",
+    }
+
+
+KID_SEED = [
+    kid_ev("k1", "수영", ymd(0), "10:00", "11:00", cat="academy", kids=("kid2",),
+           supplies=["수영복", "물통"], rrule="FREQ=WEEKLY;BYDAY=TU,TH"),
+    kid_ev("k4", "태권도", ymd(0), "16:00", "17:30", kids=("kid1",),
+           supplies=["도복"]),
+    kid_ev("k2", "예방접종", ymd(3), "09:30", "10:00", kids=(), cat="hospital"),
+    kid_ev("k3", "체험학습 신청서", ymd(1), allday=True, kids=("kid2",), cat="supplies",
+           supplies=["신청서"]),
+]
+
+
+def seed_kids(ctx):
+    js = """
+    try{
+      if(!localStorage.getItem('__kseeded')){
+        localStorage.setItem('pcal.kids.kids.v1', %s);
+        localStorage.setItem('pcal.kids.events.v1', %s);
+        localStorage.setItem('pcal.tab.v1','kidHome');
+        localStorage.setItem('__kseeded','1');
+      }
+      localStorage.setItem('pcal_demo_purged_v1','1');
+    }catch(e){}
+    """ % (json.dumps(json.dumps(KIDS, ensure_ascii=False)), json.dumps(json.dumps(KID_SEED, ensure_ascii=False)))
+    ctx.add_init_script(js)
 
 
 def seed(ctx, events):
@@ -407,6 +454,188 @@ with sync_playwright() as p:
         assert after == before - 1, "event not deleted"
     step("edit_and_delete", edit_and_delete)
     ectx.close()
+
+    # ---------------------------------------------------------------- 육아 탭 (데스크톱)
+    kctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="ko-KR",
+                               timezone_id="Asia/Seoul")
+    seed_kids(kctx)
+    kp = kctx.new_page()
+    wire(kp, "kids")
+    kp.goto(BASE, wait_until="load")
+    kp.wait_for_timeout(800)
+    report["kid_tabs"] = [kp.locator("#tabBar button").nth(i).inner_text().replace("\n", " ") for i in range(3)]
+    report["kid_home_items"] = kp.locator("#kidHome .kitem").count()
+    report["kid_home_sups"] = kp.locator("#kidHome .ksup").count()
+    assert kp.locator("#tabBar button").count() == 3, report["kid_tabs"]
+    assert kp.locator("#viewKidHome").is_visible(), "kids home not shown"
+    assert report["kid_home_items"] >= 1, report["kid_home_items"]
+    assert report["kid_home_sups"] >= 2, report["kid_home_sups"]
+    assert kp.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1") is False
+    kp.screenshot(path=str(OUT / "19-kids-home.png"))
+
+    def kids_tabs():
+        kp.click('#tabBar [data-tab="kidWeek"]')
+        kp.wait_for_timeout(500)
+        assert kp.locator("#viewKidWeek").is_visible(), "timetable not shown"
+        report["kid_week_blocks"] = kp.locator("#kidWeek .kblk").count()
+        assert report["kid_week_blocks"] > 0, "no timetable blocks"
+        assert kp.inner_text("#htitle") == "시간표", kp.inner_text("#htitle")
+        kp.screenshot(path=str(OUT / "20-kids-week.png"))
+        kp.click('#tabBar [data-tab="cal"]')
+        kp.wait_for_timeout(450)
+        assert kp.locator("#viewMonth").is_visible(), "calendar not shown"
+        assert kp.locator("#todayBtn").is_visible(), "calendar nav missing after tab return"
+        kp.click('#tabBar [data-tab="kidHome"]')
+        kp.wait_for_timeout(400)
+        assert kp.locator("#viewKidHome").is_visible()
+        assert kp.inner_text("#htitle") == "육아 홈", kp.inner_text("#htitle")
+    step("kids_tabs", kids_tabs)
+
+    def kids_filter():
+        total = kp.locator("#kidHome .kitem").count()
+        kp.click('#kidsBar [data-kidfilter="kid2"]')
+        kp.wait_for_timeout(400)
+        only = kp.locator("#kidHome .kitem").count()
+        report["kid_filter"] = [total, only]
+        assert only < total, report["kid_filter"]
+        assert "수영" in kp.inner_text("#kidHome")
+        assert "태권도" not in kp.inner_text("#kidHome")
+        kp.click('#kidsBar [data-kidfilter="all"]')
+        kp.wait_for_timeout(350)
+        assert kp.locator("#kidHome .kitem").count() == total
+    step("kids_filter", kids_filter)
+
+    def kids_supply_check():
+        before = kp.locator("#kidHome .ksup.on").count()
+        kp.locator("#kidHome .ksup").first.click()
+        kp.wait_for_timeout(450)
+        after = kp.locator("#kidHome .ksup.on").count()
+        report["kid_supply_check"] = [before, after]
+        assert after == before + 1, report["kid_supply_check"]
+        marks = kp.evaluate("JSON.parse(localStorage.getItem('pcal.kids.events.v1')).flatMap(function(e){return e.supplies||[];}).filter(function(s){return Object.keys(s.done||{}).length>0;}).length")
+        assert marks >= 1, "supply check not saved"
+    step("kids_supply_check", kids_supply_check)
+
+    def kids_add_event():
+        kp.click("#kidAddBtn")
+        kp.wait_for_timeout(400)
+        assert kp.locator("#kModal").is_visible(), "kids editor not visible"
+        kp.fill("#kTitle", "발레")
+        kp.fill("#kDate", ymd(0))
+        kp.fill("#kStart", "15:00")
+        kp.fill("#kEnd", "16:00")
+        kp.fill("#kSupInput", "발레복")
+        kp.click("#kSupAdd")
+        kp.screenshot(path=str(OUT / "21-kids-editor.png"))
+        kp.click("#kSave")
+        kp.wait_for_timeout(500)
+        evs = json.loads(kp.evaluate("localStorage.getItem('pcal.kids.events.v1')"))
+        hit = [e for e in evs if e["title"] == "발레"]
+        report["kid_added"] = {"date": hit[0]["date"], "start": hit[0]["start"], "sup": hit[0]["supplies"]} if hit else None
+        assert hit, "kids event not saved"
+        assert hit[0]["date"] == ymd(0) and hit[0]["start"] == "15:00", report["kid_added"]
+        assert hit[0]["supplies"] and hit[0]["supplies"][0]["text"] == "발레복"
+        assert "발레" in kp.inner_text("#kidHome")
+    step("kids_add_event", kids_add_event)
+
+    def kids_edit_delete():
+        kp.locator("#kidHome .kitem", has_text="발레").first.click()
+        kp.wait_for_timeout(400)
+        assert kp.input_value("#kTitle") == "발레", kp.input_value("#kTitle")
+        kp.fill("#kTitle", "발레(수정)")
+        kp.click("#kSave")
+        kp.wait_for_timeout(450)
+        titles = [e["title"] for e in json.loads(kp.evaluate("localStorage.getItem('pcal.kids.events.v1')"))]
+        assert "발레(수정)" in titles, titles
+        kp.locator("#kidHome .kitem", has_text="발레(수정)").first.click()
+        kp.wait_for_timeout(350)
+        kp.click("#kDel")
+        kp.wait_for_timeout(350)
+        assert kp.locator("#confirm").is_visible(), "delete confirm missing"
+        kp.click("#cbOk")
+        kp.wait_for_timeout(500)
+        titles = [e["title"] for e in json.loads(kp.evaluate("localStorage.getItem('pcal.kids.events.v1')"))]
+        report["kid_titles_after_delete"] = titles
+        assert "발레(수정)" not in titles, titles
+    step("kids_edit_delete", kids_edit_delete)
+
+    def kids_repeat():
+        kp.click("#kidAddBtn")
+        kp.wait_for_timeout(350)
+        kp.fill("#kTitle", "축구")
+        kp.fill("#kDate", ymd(0))
+        kp.select_option("#kRep", "weekly")
+        kp.wait_for_timeout(250)
+        kp.click('#kDow [data-kd="MO"]')
+        kp.click('#kDow [data-kd="WE"]')
+        kp.click("#kSave")
+        kp.wait_for_timeout(500)
+        ev = [e for e in json.loads(kp.evaluate("localStorage.getItem('pcal.kids.events.v1')")) if e["title"] == "축구"]
+        report["kid_rrule"] = ev[0]["rrule"] if ev else None
+        assert ev and ev[0]["rrule"].startswith("FREQ=WEEKLY"), report["kid_rrule"]
+        assert "BYDAY" in ev[0]["rrule"], report["kid_rrule"]
+        kp.click('#tabBar [data-tab="kidWeek"]')
+        kp.wait_for_timeout(450)
+        assert "축구" in kp.inner_text("#kidWeek"), "repeat event missing in timetable"
+    step("kids_repeat", kids_repeat)
+
+    def kids_rename():
+        kp.click("#settingsBtn")
+        kp.wait_for_timeout(350)
+        kp.fill('#setKids [data-kidname="kid1"]', "첫째")
+        kp.locator('#setKids [data-kidname="kid1"]').press("Tab")
+        kp.wait_for_timeout(500)
+        stored = kp.evaluate("JSON.parse(localStorage.getItem('pcal.kids.kids.v1'))[0].name")
+        report["kid_renamed"] = stored
+        assert stored == "첫째", stored
+        kp.click("#setClose")
+        kp.wait_for_timeout(300)
+        assert "첫째" in kp.inner_text("#kidsBar"), kp.inner_text("#kidsBar")
+    step("kids_rename", kids_rename)
+    kctx.close()
+
+    # ---------------------------------------------------------------- 육아 (휴대폰 390×844)
+    kmctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True,
+                                locale="ko-KR", timezone_id="Asia/Seoul")
+    seed_kids(kmctx)
+    km = kmctx.new_page()
+    wire(km, "kidsm")
+    km.goto(BASE, wait_until="load")
+    km.wait_for_timeout(900)
+    report["kid_mobile_overflow"] = km.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")
+    report["kid_mobile_tabs"] = km.locator("#tabBar button").count()
+    report["kid_mobile_items"] = km.locator("#kidHome .kitem").count()
+    assert report["kid_mobile_overflow"] is False
+    assert report["kid_mobile_tabs"] == 3
+    assert km.inner_text("#htitle") == "육아 홈", km.inner_text("#htitle")
+    km.screenshot(path=str(OUT / "22-kids-mobile-home.png"))
+
+    def kid_mobile_week():
+        km.tap('#tabBar [data-tab="kidWeek"]')
+        km.wait_for_timeout(600)
+        report["kid_mobile_week_overflow"] = km.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")
+        report["kid_mobile_blocks"] = km.locator("#kidWeek .kblk").count()
+        assert report["kid_mobile_week_overflow"] is False
+        km.screenshot(path=str(OUT / "23-kids-mobile-week.png"))
+    step("kid_mobile_week", kid_mobile_week)
+
+    def kid_mobile_modal():
+        km.tap("#kidAddBtn")
+        km.wait_for_timeout(600)
+        assert km.locator("#kModal").is_visible()
+        box = km.locator("#kModal .modal-card").bounding_box()
+        report["kid_mobile_modal_box"] = {"w": round(box["width"]), "h": round(box["height"])}
+        assert box["width"] <= 390
+        km.screenshot(path=str(OUT / "24-kids-mobile-editor.png"))
+        km.tap("#kCancel")
+        km.wait_for_timeout(300)
+        km.tap('#tabBar [data-tab="cal"]')
+        km.wait_for_timeout(500)
+        report["kid_mobile_cal_overflow"] = km.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")
+        assert report["kid_mobile_cal_overflow"] is False
+        km.screenshot(path=str(OUT / "25-kids-mobile-calendar.png"))
+    step("kid_mobile_modal", kid_mobile_modal)
+    kmctx.close()
 
     # ---------------------------------------------------------------- 처음 여는 화면
     nctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="ko-KR")

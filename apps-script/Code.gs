@@ -1,8 +1,8 @@
 /**
- * 내 캘린더 — 비공개 구글 시트 백엔드 (Google Apps Script) v1.0.0
+ * 내 캘린더 — 비공개 구글 시트 백엔드 (Google Apps Script) v1.1.0
  * =============================================================
- * 구글 캘린더 스타일 개인 캘린더의 저장소입니다.
- *  · 일정은 이 스프레드시트(비공개)에만 저장됩니다.
+ * 구글 캘린더 스타일 개인 캘린더 + 육아(아이 일정·준비물·시간표)의 저장소입니다.
+ *  · 일정·육아 일정은 이 스프레드시트(비공개)에만 저장됩니다.
  *  · 「📤 구글 캘린더로 보내기」를 누른 일정만 내 구글 캘린더의 **기본 캘린더**로 복사됩니다.
  *
  * 설치 (한 번만, 약 3분)
@@ -29,6 +29,11 @@
  *             수정시각은 그 캘린더(이름·색상·표시여부·순서)를 마지막으로 고친 시각입니다.
  *             앱은 이 값으로 '시트와 이 기기 중 더 최근 것'을 골라 씁니다(이름이 되돌아가는 것 방지).
  *  · 설정   : 항목 | 값 | 비고
+ *  · 육아일정 : ID | 제목 | 아이 | 종류 | 날짜 | 마지막날 | 종일 | 시작 | 끝 | 장소 | 메모 | 준비물 | 반복 | 제외날짜 | 수정시각
+ *             아이=`kid1,kid2` / 종류=`academy` 등 / 준비물=JSON / 반복=`FREQ=WEEKLY;BYDAY=MO,WE` /
+ *             제외날짜=`2026-11-26,2026-12-03` — 기존 `일정`·`캘린더`·`설정` 탭은 예전 그대로입니다.
+ *  · 육아프로필 : ID | 이름 | 색상 | 순서 | 수정시각
+ *             아이 이름은 여기에만 저장됩니다(기본값 `아이 1`·`아이 2`, 앱 설정에서 변경).
  *
  * API (브라우저는 JSONP GET, 또는 text/plain POST 로 부릅니다)
  *  ?action=ping                      연결 확인 → {ok, version, now, sheet, timezone}
@@ -39,6 +44,10 @@
  *  ?action=saveAll    {events, calendars}
  *                                    이 브라우저의 일정·캘린더를 시트에 통째로 올립니다(최초 이전용).
  *                                    events 가 비어 있고 시트에 일정이 있으면 거부합니다(clear:true 로만 허용).
+ *  ?action=saveKidsEvent {event}     육아 일정 한 건 저장(없으면 추가)
+ *  ?action=deleteKidsEvent {id}      육아 일정 한 건 삭제
+ *  ?action=saveKidsProfile {children} 아이 프로필(이름·색상·순서·수정시각) 전체 저장
+ *  ?action=load                      응답에 kids:{children:[...], events:[...]} 도 들어 있습니다.
  *  ?action=exportToGoogleCalendar {event} | {id}
  *                                    내 구글 캘린더 기본 캘린더에 일정을 만들고 eventId를 시트에 기록
  *  ?callback=함수이름                 JSONP 로 감싸서 응답
@@ -57,14 +66,16 @@
 /** 스프레드시트 ID. 시트에 붙인(컨테이너 바인딩) 스크립트라면 비워 두세요. */
 var SHEET_ID = '';
 
-var BACKEND_VERSION = '1.0.1';
+var BACKEND_VERSION = '1.1.0';
 
-var TABS = { events: '일정', calendars: '캘린더', settings: '설정' };
+var TABS = { events: '일정', calendars: '캘린더', settings: '설정', kidsEvents: '육아일정', kidsProfile: '육아프로필' };
 
 var HEADERS = {
   events: ['ID', '제목', '시작', '종료', '종일', '반복', '캘린더ID', '장소', '메모', '구글전송ID', '수정시각'],
   calendars: ['ID', '이름', '색상', '표시여부', '순서', '수정시각'],
-  settings: ['항목', '값', '비고']
+  settings: ['항목', '값', '비고'],
+  kidsEvents: ['ID', '제목', '아이', '종류', '날짜', '마지막날', '종일', '시작', '끝', '장소', '메모', '준비물', '반복', '제외날짜', '수정시각'],
+  kidsProfile: ['ID', '이름', '색상', '순서', '수정시각']
 };
 
 var DEFAULT_CALENDARS = [
@@ -75,6 +86,8 @@ var DEFAULT_CALENDARS = [
 ];
 
 var MAX_EVENTS = 3000;
+var MAX_KIDS_EVENTS = 3000;
+var MAX_KIDS = 4;
 
 /* ------------------------------------------------------------------ 라우팅 */
 
@@ -123,6 +136,9 @@ function handle_(action, req, cb) {
       case 'deleteEvent': return out_(deleteEvent_(req), cb);
       case 'saveCalendars': return out_(saveCalendars_(req), cb);
       case 'saveAll': return out_(saveAll_(req), cb);
+      case 'saveKidsEvent': return out_(saveKidsEvent_(req), cb);
+      case 'deleteKidsEvent': return out_(deleteKidsEvent_(req), cb);
+      case 'saveKidsProfile': return out_(saveKidsProfile_(req), cb);
       case 'exportToGoogleCalendar': return out_(exportToGoogle_(req), cb);
       default: return out_({ ok: false, error: '알 수 없는 요청: ' + action }, cb);
     }
@@ -183,6 +199,9 @@ function setup_() {
       ['시간대', Session.getScriptTimeZone()]
     ]);
   }
+  /* 육아(아이 일정·프로필) 탭 — 비어 있으면 만들기만 하고 아무 값도 넣지 않습니다. */
+  sheet_(TABS.kidsEvents, HEADERS.kidsEvents);
+  sheet_(TABS.kidsProfile, HEADERS.kidsProfile);
 }
 
 /** 편집기에서 직접 실행해 시트를 준비할 때 사용합니다. */
@@ -214,7 +233,8 @@ function load_() {
     version: BACKEND_VERSION,
     events: readEvents_(ss),
     calendars: readCalendars_(ss),
-    settings: readSettings_(ss)
+    settings: readSettings_(ss),
+    kids: { children: readKidsProfile_(ss), events: readKidsEvents_(ss) }
   };
   if (!out.calendars.length) out.calendars = DEFAULT_CALENDARS;
   return out;
@@ -420,6 +440,151 @@ function findRow_(sh, id) {
     if (String(ids[i][0]) === String(id)) return i + 2;
   }
   return 0;
+}
+
+/* ------------------------------------------------------------------ 육아: 읽기/저장 */
+
+function readKidsProfile_(ss) {
+  var sh = ss.getSheetByName(TABS.kidsProfile);
+  var out = [];
+  if (!sh || sh.getLastRow() < 2) return out;
+  var rows = sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.kidsProfile.length).getValues();
+  rows.forEach(function (r, i) {
+    var id = String(r[0] || '').trim();
+    if (!id) return;
+    out.push({
+      id: id,
+      name: String(r[1] || ('아이 ' + (i + 1))),
+      color: String(r[2] || '#3B82F6'),
+      order: Number(r[3] == null ? i : r[3]),
+      updatedAt: toIso_(r[4])
+    });
+  });
+  out.sort(function (a, b) { return a.order - b.order; });
+  return out.slice(0, MAX_KIDS);
+}
+
+function readKidsEvents_(ss) {
+  var sh = ss.getSheetByName(TABS.kidsEvents);
+  var out = [];
+  if (!sh || sh.getLastRow() < 2) return out;
+  var rows = sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.kidsEvents.length).getValues();
+  rows.forEach(function (r) {
+    var id = String(r[0] || '').trim();
+    if (!id) return;
+    out.push({
+      id: id,
+      title: String(r[1] || ''),
+      childIds: String(r[2] || '').split(',').map(function (s) { return s.trim(); }).filter(function (s) { return !!s; }),
+      cat: String(r[3] || 'etc'),
+      date: toText_(r[4]),
+      endDate: toText_(r[5]),
+      allDay: String(r[6] || '').toUpperCase() === 'Y',
+      start: toTime_(r[7]),
+      end: toTime_(r[8]),
+      place: String(r[9] || ''),
+      memo: String(r[10] || ''),
+      supplies: parseSupplies_(r[11]),
+      rrule: String(r[12] || ''),
+      exdates: String(r[13] || '').split(',').map(function (s) { return s.trim(); }).filter(function (s) { return !!s; }),
+      updatedAt: toIso_(r[14])
+    });
+  });
+  return out;
+}
+
+/** 시트가 시간을 Date 로 바꾸어 저장했을 때도 'HH:mm' 으로 돌려줍니다. */
+function toTime_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    var tz = Session.getScriptTimeZone() || 'Asia/Seoul';
+    return Utilities.formatDate(v, tz, 'HH:mm');
+  }
+  var s = String(v).trim();
+  var m = s.match(/(\d{1,2}):(\d{2})/);
+  if (m) return ('0' + m[1]).slice(-2) + ':' + m[2];
+  return '';
+}
+
+function parseSupplies_(v) {
+  if (v === null || v === undefined || v === '') return [];
+  var list = null;
+  try { list = JSON.parse(String(v)); } catch (e) { list = null; }
+  if (!Array.isArray(list)) return [];
+  return list.map(function (x) {
+    return {
+      id: String((x && x.id) || ''),
+      text: String((x && x.text) || ''),
+      done: (x && x.done && typeof x.done === 'object') ? x.done : {}
+    };
+  }).filter(function (x) { return !!x.text; });
+}
+
+function saveKidsEvent_(req) {
+  var ev = req.event || req;
+  if (!ev || !ev.id) return { ok: false, error: '육아 일정 ID가 없습니다.' };
+  var sh = sheet_(TABS.kidsEvents, HEADERS.kidsEvents);
+  var row = findRow_(sh, ev.id);
+  var values = [[
+    String(ev.id),
+    String(ev.title || ''),
+    (Array.isArray(ev.childIds) ? ev.childIds : []).map(String).join(','),
+    String(ev.cat || 'etc'),
+    String(ev.date || ''),
+    String(ev.endDate || ''),
+    ev.allDay ? 'Y' : 'N',
+    String(ev.start || ''),
+    String(ev.end || ''),
+    String(ev.place || ''),
+    String(ev.memo || '').slice(0, 5000),
+    JSON.stringify(Array.isArray(ev.supplies) ? ev.supplies : []),
+    String(ev.rrule || ''),
+    (Array.isArray(ev.exdates) ? ev.exdates : []).map(String).join(','),
+    String(ev.updatedAt || new Date().toISOString())
+  ]];
+  if (row > 0) {
+    sh.getRange(row, 1, 1, values[0].length).setValues(values);
+  } else {
+    if (sh.getLastRow() >= MAX_KIDS_EVENTS + 1) return { ok: false, error: '육아 일정이 너무 많습니다(최대 ' + MAX_KIDS_EVENTS + '개).' };
+    sh.getRange(sh.getLastRow() + 1, 1, 1, values[0].length).setValues(values);
+  }
+  return { ok: true, id: String(ev.id) };
+}
+
+function deleteKidsEvent_(req) {
+  var id = String(req.id || (req.event && req.event.id) || '');
+  if (!id) return { ok: false, error: '삭제할 육아 일정 ID가 없습니다.' };
+  var sh = sheet_(TABS.kidsEvents, HEADERS.kidsEvents);
+  var row = findRow_(sh, id);
+  if (row > 0) sh.deleteRow(row);
+  return { ok: true, id: id, deleted: row > 0 };
+}
+
+function saveKidsProfile_(req) {
+  var list = req.children;
+  if (!Array.isArray(list)) return { ok: false, error: '아이 프로필 목록이 없습니다.' };
+  if (!list.length) return { ok: false, error: '아이가 하나도 없어 저장하지 않았습니다.' };
+  var ss = ss_();
+  var sh = sheet_(TABS.kidsProfile, HEADERS.kidsProfile);
+  /* 수정시각을 보내지 않는 옛 앱이 시트에 있는 더 최신 이름을 지우지 않도록 막습니다. */
+  if (!list.some(function (c) { return calMs_(c) > 0; })) {
+    var current = readKidsProfile_(ss);
+    if (current.some(function (c) { return calMs_(c) > 0; })) {
+      return { ok: false, error: '이 앱은 아이 프로필 수정시각을 보내지 않는 예전 버전입니다. 새 버전으로 새로고침한 뒤 다시 시도해 주세요.' };
+    }
+  }
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.kidsProfile.length).clearContent();
+  var rows = list.slice(0, MAX_KIDS).map(function (c, i) {
+    return [
+      String(c.id || ('kid' + (i + 1))),
+      String(c.name || ('아이 ' + (i + 1))).slice(0, 20),
+      String(c.color || '#3B82F6'),
+      Number(c.order == null ? i : c.order),
+      calMs_(c) ? new Date(calMs_(c)).toISOString() : ''
+    ];
+  });
+  if (rows.length) sh.getRange(2, 1, rows.length, HEADERS.kidsProfile.length).setValues(rows);
+  return { ok: true, count: rows.length };
 }
 
 /* ------------------------------------------------------------------ 구글 캘린더로 보내기 */

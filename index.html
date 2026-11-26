@@ -937,7 +937,8 @@ function apiGet(action,data){
     const timer=setTimeout(()=>{ finish(); reject(new Error('응답이 없습니다. 시트 배포 권한(모든 사용자)을 확인해 주세요.')); },20000);
     function finish(){
       if(done) return; done=true; clearTimeout(timer);
-      try{ delete window[cb]; }catch(e){ window[cb]=undefined; }
+      // 응답이 늦게 도착해도 '함수가 없다'는 오류가 콘솔에 남지 않도록 빈 함수로 바꿔 둡니다.
+      try{ window[cb]=function(){}; }catch(e){}
       if(s.parentNode) s.parentNode.removeChild(s);
     }
     window[cb]=d=>{ finish(); resolve(d); };
@@ -971,14 +972,6 @@ function api(action,data){
   return p;
 }
 
-let syncChain=Promise.resolve();
-/** 캘린더 목록 같은 작은 설정 저장용(일정은 아래 대기열을 거칩니다). */
-function sync(action,payload){
-  if(!state.url) return Promise.resolve(null);
-  syncChain=syncChain.then(()=>api(action,payload)).then(r=>{ setSync('on'); return r; })
-    .catch(err=>{ setSync('error'); toast('시트 저장 실패 — '+err.message); return null; });
-  return syncChain;
-}
 
 /* =====================================================================
    양방향 동기화
@@ -995,6 +988,125 @@ let knownIds = new Set();                           // 이 기기가 시트에�
 const recentWrite = new Map();                      // 방금 시트에 쓴 값 (읽기 지연으로 되돌아가는 것 방지)
 let autoSyncStarted=false, flushing=false, pulling=false, pullAgain=false;
 
+/* --- 캘린더(목록·이름·색상·표시여부) 동기화 -------------------------------
+   일정과 달리 캘린더는 개수가 적어 '목록 전체'를 한 번에 올립니다.
+   · 이 기기에서 고친 목록은 올라갈 때까지(대기열) 시트의 옛 값으로 덮지 않습니다.
+   · 캘린더마다 updatedAt 을 두고 시트와 이 기기 중 더 최근 것을 씁니다.
+   · 시트에서 사라진 캘린더는 이 기기에서도 지우되(다른 기기에서 삭제),
+     이 기기에만 있는 캘린더(새로 만든 것)는 지우지 않고 시트로 올립니다.
+   ---------------------------------------------------------------------- */
+const CALSYNC_LS = 'pcal.calsync.v1';
+let calsMeta = {pending:null, known:[], edited:false, error:''};
+let calsFlushing=false;
+
+function calTs(c){ const t=Date.parse(String((c&&c.updatedAt)||'')); return isNaN(t)?0:t; }
+function calsSig(list){
+  return (list||[]).map(c=>[String(c&&c.id),String((c&&c.name)||''),String((c&&c.color)||''),(c&&c.visible===false)?'N':'Y',Number((c&&c.order)||0)].join('~')).join('|');
+}
+function cloneCals(list){ try{ return JSON.parse(JSON.stringify(list||[])); }catch(e){ return (list||[]).slice(); } }
+/** 저장된 기록이 없을 때: 기본값과 다른 이름·색상을 쓰고 있었으면 '직접 고친 기기'로 봅니다. */
+function looksEditedLocally(){
+  const def=defaultCals();
+  if(!Array.isArray(state.cals) || !state.cals.length) return false;
+  if(state.cals.length!==def.length) return true;
+  const byId=new Map(def.map(c=>[String(c.id),c]));
+  return state.cals.some(c=>{
+    const d=byId.get(String(c.id));
+    if(!d) return true;
+    return String(c.name)!==d.name || String(c.color)!==d.color || (c.visible===false)!==(d.visible===false);
+  });
+}
+function loadCalsMeta(){
+  let raw=null;
+  try{ raw=localStorage.getItem(CALSYNC_LS); }catch(e){}
+  let s=null;
+  try{ s=raw?JSON.parse(raw):null; }catch(e){ s=null; }
+  if(s && typeof s==='object' && !Array.isArray(s)){
+    if(s.pending && Array.isArray(s.pending.cals)) calsMeta.pending={cals:s.pending.cals, at:String(s.pending.at||'')};
+    if(Array.isArray(s.known)) calsMeta.known=s.known.map(String);
+    calsMeta.edited=!!s.edited;
+    calsMeta.error=String(s.error||'');
+  } else {
+    calsMeta.edited=looksEditedLocally();   // 이 기능이 생기기 전에 고쳐 둔 이름도 지켜 줍니다
+  }
+}
+function saveCalsMeta(){
+  try{ localStorage.setItem(CALSYNC_LS, JSON.stringify(calsMeta)); }catch(e){}
+}
+
+/** 캘린더 목록을 고친 뒤 부릅니다 — 이 기기에 저장하고 시트로 올립니다. */
+function queueCals(){
+  calsMeta.edited=true;
+  state.cals.forEach((c,i)=>{ c.order=i; });
+  calsMeta.pending={cals:cloneCals(state.cals), at:new Date().toISOString()};
+  saveCalsMeta(); persistLocal(); setSyncInfo();
+  return flushCals();
+}
+
+/** 아직 못 올린 캘린더 변경을 시트로 올립니다(실패하면 남겨 두고 다음 기회에 다시). */
+function flushCals(){
+  if(!state.url) return Promise.resolve(true);
+  if(!calsMeta.pending) return Promise.resolve(true);
+  if(calsFlushing) return Promise.resolve(false);
+  calsFlushing=true;
+  const shot=calsMeta.pending;
+  return api('saveCalendars',{calendars:shot.cals}).then(r=>{
+    if(!r || r.ok===false){
+      const msg=(r&&r.error)||'캘린더를 시트에 올리지 못했습니다.';
+      if(/알 수 없는 요청/.test(msg)) throw new Error('시트 백엔드(Code.gs)가 예전 버전입니다 — 새 Code.gs로 다시 배포해 주세요.');
+      throw new Error(msg);
+    }
+    if(calsMeta.pending===shot) calsMeta.pending=null;
+    calsMeta.known=(shot.cals||[]).map(c=>String(c.id));
+    calsMeta.error='';
+    saveCalsMeta(); setSync('on'); setSyncInfo();
+    return true;
+  }).catch(err=>{
+    calsMeta.error=String((err&&err.message)||'');
+    saveCalsMeta();
+    setSync(navigator.onLine===false?'offline':'error');
+    setSyncInfo('캘린더를 시트에 못 올렸어요'+(calsMeta.error?' — '+calsMeta.error:''));
+    return false;
+  }).then(ok=>{ calsFlushing=false; return ok; });
+}
+
+/**
+ * 시트에서 읽은 캘린더 목록을 이 기기에 반영합니다.
+ * 화면을 다시 그려야 하면 true 를 돌려줍니다.
+ */
+function applyRemoteCals(remoteCals){
+  if(!Array.isArray(remoteCals)) return false;      // 예전 백엔드 — 캘린더 정보를 주지 않음 → 이 기기 값 유지
+  if(calsMeta.pending) return false;                // 아직 못 올린 이 기기의 변경 → 시트 값으로 덮지 않습니다
+  const remote=remoteCals.filter(c=>c && c.id!=null && String(c.id)!=='');
+  const local=Array.isArray(state.cals)?state.cals:[];
+  const localById=new Map(local.map(c=>[String(c.id),c]));
+  const remoteIds=new Set(remote.map(c=>String(c.id)));
+  const known=new Set((calsMeta.known||[]).map(String));
+  const out=[];
+  remote.forEach(rc=>{
+    const lc=localById.get(String(rc.id));
+    if(!lc){ out.push(Object.assign({},rc)); return; }        // 다른 기기에서 새로 만든 캘린더
+    const rt=calTs(rc), lt=calTs(lc);
+    if(rt>lt) out.push(Object.assign({},rc));                 // 시트 쪽이 더 최근
+    else if(lt>rt) out.push(lc);                              // 이 기기 쪽이 더 최근
+    else out.push(calsMeta.edited?lc:Object.assign({},rc));   // 시각 정보가 없을 때: 직접 고친 적이 있으면 이 기기 값
+  });
+  local.forEach(lc=>{
+    const id=String(lc.id);
+    if(remoteIds.has(id)) return;
+    if(known.has(id)) return;                                 // 시트에서 사라짐 → 다른 기기에서 삭제한 것
+    out.push(lc);                                             // 이 기기에만 있는 캘린더 → 지우지 않고 올립니다
+  });
+  const changed=calsSig(state.cals)!==calsSig(out);
+  if(changed) state.cals=out;
+  const needsPush=calsSig(out)!==calsSig(remote);
+  calsMeta.known=Array.from(remoteIds);
+  if(needsPush) calsMeta.pending={cals:cloneCals(out), at:new Date().toISOString()};
+  saveCalsMeta();
+  if(needsPush) flushCals();
+  return changed;
+}
+
 function loadSyncStore(){
   try{
     const p=JSON.parse(localStorage.getItem(SYNC_LS.pending)||'{}');
@@ -1009,6 +1121,7 @@ function loadSyncStore(){
       knownIds=new Set(Array.isArray(s.known)?s.known.map(String):[]);
     }
   }catch(e){}
+  loadCalsMeta();
 }
 function savePending(){ try{ localStorage.setItem(SYNC_LS.pending, JSON.stringify(pending)); }catch(e){} }
 function saveSyncState(){
@@ -1067,14 +1180,14 @@ function sigOf(list){
 function applyRemote(d){
   const remote=Array.isArray(d.events)?d.events:[];
   const remoteEmpty=remote.length===0;
-  if(Array.isArray(d.calendars) && d.calendars.length) state.cals=d.calendars;
+  const calsChanged=applyRemoteCals(d.calendars);
 
   // 시트가 비어 있을 때 이 기기의 일정을 지우지 않습니다(처음 연결했는데 아직 안 올린 경우 등).
   // 일정을 정말 전부 지운 경우는 연속 두 번 비어 있을 때만 인정합니다(저장 도중의 빈 응답 보호).
   if(remoteEmpty && state.events.length && pendingCount()===0){
-    if(!syncState.seenNonEmpty) return {applied:false, changed:false, reason:'empty-sheet'};
+    if(!syncState.seenNonEmpty) return afterCals_({applied:false, changed:false, reason:'empty-sheet'}, calsChanged);
     syncState.strikes=(syncState.strikes||0)+1; saveSyncState();
-    if(syncState.strikes<2) return {applied:false, changed:false, reason:'empty-once'};
+    if(syncState.strikes<2) return afterCals_({applied:false, changed:false, reason:'empty-once'}, calsChanged);
   } else if(!remoteEmpty && syncState.strikes){ syncState.strikes=0; saveSyncState(); }
   if(!remoteEmpty) syncState.seenNonEmpty=true;
 
@@ -1108,10 +1221,16 @@ function applyRemote(d){
 
   knownIds=new Set(remoteIds); saveSyncState();
   const before=sigOf(state.events), after=sigOf(out);
-  if(before===after) return {applied:true, changed:false};
+  if(before===after && !calsChanged) return {applied:true, changed:false};
   state.events=out;
   persistLocal(); renderAll(); setSyncInfo();
   return {applied:true, changed:true};
+}
+/** 일정은 그대로 두고 캘린더만 바뀐 경우에도 화면·저장을 맞춰 줍니다. */
+function afterCals_(res, calsChanged){
+  if(calsChanged){ persistLocal(); renderAll(); setSyncInfo(); }
+  if(calsChanged && res && !res.changed) res.calendarsChanged=true;
+  return res;
 }
 
 /** 시트를 다시 읽습니다. 기기로 돌아올 때·주기적으로 부릅니다. */
@@ -1149,7 +1268,7 @@ function startAutoSync(){
   autoSyncStarted=true;
   const kick=()=>{
     if(!state.url || document.visibilityState==='hidden') return;
-    flushPending().then(()=>refreshFromRemote({}));
+    flushCals().then(()=>flushPending()).then(()=>refreshFromRemote({}));
   };
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') kick(); });
   window.addEventListener('focus',kick);
@@ -1158,7 +1277,7 @@ function startAutoSync(){
   setInterval(()=>{
     if(!state.url || document.visibilityState!=='visible') return;
     if(!$('#modal').hidden || !$('#settings').hidden || !$('#calModal').hidden || !$('#qa').hidden) return;
-    flushPending().then(()=>refreshFromRemote({quiet:true}));
+    flushCals().then(()=>flushPending()).then(()=>refreshFromRemote({quiet:true}));
   }, 60000);
 }
 
@@ -1166,7 +1285,7 @@ function startAutoSync(){
 function manualSync(){
   if(!state.url){ openSettings(); setMsg('먼저 시트를 연결해 주세요.'); toast('먼저 설정에서 시트를 연결해 주세요'); return Promise.resolve(); }
   setMsg('시트에서 불러오는 중…'); setSync('busy');
-  return flushPending().then(()=>refreshFromRemote({force:true})).then(res=>{
+  return flushCals().then(()=>flushPending()).then(()=>refreshFromRemote({force:true})).then(res=>{
     if(res && res.error){ setMsg('불러오지 못했어요 — '+res.error); toast('불러오지 못했어요'); }
     else {
       setMsg('최신 상태입니다 · 일정 '+state.events.length+'개'+(pendingCount()?` · 못 올린 변경 ${pendingCount()}건`:''));
@@ -1200,6 +1319,7 @@ function setSyncInfo(extra){
     : '아직 시트에서 읽지 않았습니다.';
   const lo=localOnlyCount();
   if(lo) s+=` · 이 기기에만 있는 일정 ${lo}개`;
+  if(calsMeta.pending) s+=' · 시트에 못 올린 캘린더 변경 1건';
   if(extra) s+=' — '+extra;
   el.textContent=s;
   const b=$('#setPushLocal'); if(b) b.hidden=!(lo>0);
@@ -1879,15 +1999,19 @@ function renderColorPicker(sel){
 function saveCal(){
   const name=$('#cName').value.trim();
   if(!name){ $('#cName').focus(); toast('캘린더 이름을 넣어 주세요'); return; }
+  const now=new Date().toISOString();
   if(calEditing.isNew){
-    state.cals.push({id:'c'+Date.now().toString(36),name:name,color:calEditing.color,visible:true,order:state.cals.length});
+    state.cals.push({id:'c'+Date.now().toString(36),name:name,color:calEditing.color,visible:true,order:state.cals.length,updatedAt:now});
   } else {
     const c=calById(calEditing.id);
-    if(c){ c.name=name; c.color=calEditing.color; }
+    if(c){ c.name=name; c.color=calEditing.color; c.updatedAt=now; }
   }
   persistLocal(); renderAll(); hide($('#calModal'));
-  if(state.url) sync('saveCalendars',{calendars:state.cals});
-  toast('캘린더를 저장했어요');
+  queueCals().then(ok=>{
+    if(!state.url) toast('캘린더를 저장했어요');
+    else if(ok) toast('캘린더를 저장했어요');
+    else toast('이 기기에 저장했어요 — 시트에는 아직 못 올렸습니다');
+  });
 }
 function deleteCal(){
   if(!calEditing||calEditing.isNew) return;
@@ -1901,7 +2025,7 @@ function deleteCal(){
     if(state.url){
       doomed.forEach(id=>{ pending[id]='delete'; });
       if(doomed.length) savePending();
-      sync('saveCalendars',{calendars:state.cals}).then(()=>flushPending());
+      queueCals().then(()=>flushPending());
     }
     toast('캘린더를 삭제했어요');
   });
@@ -1909,8 +2033,9 @@ function deleteCal(){
 function toggleCal(id){
   const c=calById(id); if(!c) return;
   c.visible = c.visible===false;
+  c.updatedAt=new Date().toISOString();
   persistLocal(); renderAll(); closePop();
-  if(state.url) sync('saveCalendars',{calendars:state.cals});
+  queueCals();
 }
 
 /* ------------------------------------------------------------ 검색 */
@@ -2118,7 +2243,8 @@ function connectSheet(raw){
   state.url=url; setSync('busy'); setMsg('연결 확인 중…');
   api('ping').then(p=>{
     if(!p||p.ok!==true) throw new Error((p&&p.error)||'연결 확인에 실패했어요.');
-    if(changed){ knownIds=new Set(); syncState.seenNonEmpty=false; syncState.strikes=0; syncState.lastPull=0; saveSyncState(); }
+    if(changed){ knownIds=new Set(); syncState.seenNonEmpty=false; syncState.strikes=0; syncState.lastPull=0; saveSyncState();
+      calsMeta.known=[]; saveCalsMeta(); }
     localStorage.setItem(LS.url,url);
     return refreshFromRemote({force:true}).then(res=>{
       if(res && res.error) throw new Error(res.error);
@@ -2151,10 +2277,13 @@ function importJSON(file){
         if(!ok) return;
         state.events=d.events;
         if(Array.isArray(d.calendars)&&d.calendars.length) state.cals=d.calendars;
+        const stamp=new Date().toISOString();
+        state.cals.forEach((c,i)=>{ c.order=i; if(!c.updatedAt) c.updatedAt=stamp; });
+        calsMeta.edited=true; saveCalsMeta();
         pending={}; savePending(); persistLocal(); renderAll();
         if(state.url){
           api('saveAll',{events:state.events,calendars:state.cals,clear:true})
-            .then(r=>{ if(!r||r.ok===false) throw new Error((r&&r.error)||''); knownIds=new Set(state.events.map(e=>String(e.id))); syncState.seenNonEmpty=state.events.length>0; syncState.strikes=0; saveSyncState(); toast('가져왔어요'); })
+            .then(r=>{ if(!r||r.ok===false) throw new Error((r&&r.error)||''); knownIds=new Set(state.events.map(e=>String(e.id))); calsMeta.pending=null; calsMeta.known=state.cals.map(c=>String(c.id)); calsMeta.error=''; saveCalsMeta(); syncState.seenNonEmpty=state.events.length>0; syncState.strikes=0; saveSyncState(); toast('가져왔어요'); })
             .catch(err=>toast('이 브라우저에만 가져왔어요 — '+(err.message||'')));
         } else toast('가져왔어요');
       });
@@ -2278,6 +2407,7 @@ function bind(){
         if(!r||r.ok===false) throw new Error((r&&r.error)||'올리지 못했어요');
         pending={}; savePending();
         knownIds=new Set(state.events.map(e=>String(e.id)));
+        calsMeta.pending=null; calsMeta.known=state.cals.map(c=>String(c.id)); calsMeta.error=''; saveCalsMeta();
         syncState.seenNonEmpty=state.events.length>0; syncState.strikes=0; syncState.lastPull=Date.now(); saveSyncState();
         setSync('on'); setSyncInfo();
         setMsg('이 브라우저 일정 '+state.events.length+'개를 시트에 올렸습니다.'); toast('시트에 올렸어요');
@@ -2438,7 +2568,7 @@ function init(){
   setSyncInfo();
   if(state.url){
     startAutoSync();
-    flushPending().then(()=>refreshFromRemote({force:true}));
+    flushCals().then(()=>flushPending()).then(()=>refreshFromRemote({force:true}));
   }
 }
 

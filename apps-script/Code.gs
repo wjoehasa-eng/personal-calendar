@@ -25,7 +25,9 @@
  * 시트 구성 (처음 호출할 때 자동으로 만듭니다)
  *  · 일정   : ID | 제목 | 시작 | 종료 | 종일 | 반복 | 캘린더ID | 장소 | 메모 | 구글전송ID | 수정시각
  *             시작/종료 형식  종일=Y → `2026-11-25` / 시간 일정 → `2026-11-25T15:00`
- *  · 캘린더 : ID | 이름 | 색상 | 표시여부 | 순서
+ *  · 캘린더 : ID | 이름 | 색상 | 표시여부 | 순서 | 수정시각
+ *             수정시각은 그 캘린더(이름·색상·표시여부·순서)를 마지막으로 고친 시각입니다.
+ *             앱은 이 값으로 '시트와 이 기기 중 더 최근 것'을 골라 씁니다(이름이 되돌아가는 것 방지).
  *  · 설정   : 항목 | 값 | 비고
  *
  * API (브라우저는 JSONP GET, 또는 text/plain POST 로 부릅니다)
@@ -33,7 +35,7 @@
  *  ?action=load                      전체 읽기 → {ok, events:[...], calendars:[...], settings:{...}}
  *  ?action=saveEvent  {event}        일정 한 건 저장(없으면 추가) — 구글전송ID는 시트 값을 지키지 않습니다(아래 참고)
  *  ?action=deleteEvent {id}          일정 한 건 삭제
- *  ?action=saveCalendars {calendars} 캘린더 목록 전체 저장(이름·색상·표시여부·순서)
+ *  ?action=saveCalendars {calendars} 캘린더 목록 전체 저장(이름·색상·표시여부·순서·수정시각)
  *  ?action=saveAll    {events, calendars}
  *                                    이 브라우저의 일정·캘린더를 시트에 통째로 올립니다(최초 이전용).
  *                                    events 가 비어 있고 시트에 일정이 있으면 거부합니다(clear:true 로만 허용).
@@ -55,13 +57,13 @@
 /** 스프레드시트 ID. 시트에 붙인(컨테이너 바인딩) 스크립트라면 비워 두세요. */
 var SHEET_ID = '';
 
-var BACKEND_VERSION = '1.0.0';
+var BACKEND_VERSION = '1.0.1';
 
 var TABS = { events: '일정', calendars: '캘린더', settings: '설정' };
 
 var HEADERS = {
   events: ['ID', '제목', '시작', '종료', '종일', '반복', '캘린더ID', '장소', '메모', '구글전송ID', '수정시각'],
-  calendars: ['ID', '이름', '색상', '표시여부', '순서'],
+  calendars: ['ID', '이름', '색상', '표시여부', '순서', '수정시각'],
   settings: ['항목', '값', '비고']
 };
 
@@ -257,7 +259,8 @@ function readCalendars_(ss) {
       name: String(r[1] || '캘린더'),
       color: String(r[2] || '#039be5'),
       visible: String(r[3] || 'Y').toUpperCase() !== 'N',
-      order: Number(r[4] || i)
+      order: Number(r[4] || i),
+      updatedAt: toIso_(r[5])
     });
   });
   out.sort(function (a, b) { return a.order - b.order; });
@@ -323,9 +326,35 @@ function saveCalendars_(req) {
   var list = req.calendars;
   if (!Array.isArray(list)) return { ok: false, error: '캘린더 목록이 없습니다.' };
   if (!list.length) return { ok: false, error: '캘린더가 하나도 없어 저장하지 않았습니다.' };
+  var ss = ss_();
   var sh = sheet_(TABS.calendars, HEADERS.calendars);
+  // 수정시각을 보내지 않는 예전 앱이, 시트에 있는 더 최신 캘린더 이름을 지우지 않도록 막습니다.
+  if (!list.some(function (c) { return calMs_(c) > 0; })) {
+    var current = readCalendars_(ss);
+    if (current.some(function (c) { return calMs_(c) > 0; })) {
+      return {
+        ok: false,
+        error: '이 앱은 캘린더 수정시각을 보내지 않는 예전 버전입니다. 새 버전으로 새로고침한 뒤 다시 시도해 주세요.'
+      };
+    }
+  }
   writeCalendars_(sh, list);
-  return { ok: true, count: list.length };
+  return { ok: true, count: Math.min(list.length, 60) };
+}
+
+function calMs_(c) {
+  if (!c || !c.updatedAt) return 0;
+  var t = new Date(c.updatedAt).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
+/** 셀 값을 ISO 문자열로 돌려줍니다(비어 있으면 ''). */
+function toIso_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') return new Date(v.getTime()).toISOString();
+  var s = String(v).trim();
+  var t = new Date(s).getTime();
+  return isNaN(t) ? '' : new Date(t).toISOString();
 }
 
 function writeCalendars_(sh, list) {
@@ -336,7 +365,8 @@ function writeCalendars_(sh, list) {
       String(c.name || '캘린더'),
       String(c.color || '#039be5'),
       c.visible === false ? 'N' : 'Y',
-      Number(c.order == null ? i : c.order)
+      Number(c.order == null ? i : c.order),
+      calMs_(c) ? new Date(calMs_(c)).toISOString() : ''
     ];
   });
   if (rows.length) sh.getRange(2, 1, rows.length, HEADERS.calendars.length).setValues(rows);

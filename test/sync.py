@@ -10,7 +10,11 @@ PC(컨텍스트 A)와 휴대폰(컨텍스트 B)을 띄워 놓고, Apps Script �
   4. 시트 저장이 실패(오프라인)한 변경이 대기열에 남았다가 나중에 자동으로 올라가는가
   5. 아직 시트에 올린 적 없는 이 기기의 일정이 처음 동기화 때 지워지지 않는가
   6. 큰 저장(saveAll)이 POST 로도, 작은 저장이 JSONP 로도 되는가
-  7. 콘솔 오류 0건
+  7. PC에서 캘린더 이름을 고치면 시트·휴대폰에 반영되고, 다시 동기화해도 되돌아가지 않는가
+  8. 시트에 기본 캘린더만 있어도 이 기기에서 고친 캘린더 이름이 날아가지 않는가
+  9. 캘린더 이름 변경이 오프라인에서도 대기열에 남았다가 복구 뒤 올라가는가
+ 10. 캘린더 삭제가 시트·다른 기기에 반영되고 다시 동기화해도 되살아나지 않는가
+ 11. 콘솔 오류 0건
 
 실행:  python3 test/sync.py
 """
@@ -24,8 +28,8 @@ OUT = pathlib.Path(os.environ.get("PCAL_OUT") or (ROOT / "verification" / "2026-
 OUT.mkdir(parents=True, exist_ok=True)
 
 CALS = [
-    {"id": "personal", "name": "개인", "color": "#039be5", "visible": True, "order": 0},
-    {"id": "family", "name": "가족", "color": "#33b679", "visible": True, "order": 1},
+    {"id": "personal", "name": "개인", "color": "#039be5", "visible": True, "order": 0, "updatedAt": ""},
+    {"id": "family", "name": "가족", "color": "#33b679", "visible": True, "order": 1, "updatedAt": ""},
 ]
 
 
@@ -79,7 +83,13 @@ class Backend:
                 self.events.pop(data.get("id"), None)
                 return {"ok": True, "id": data.get("id")}
             if action == "saveCalendars":
-                self.calendars = data.get("calendars") or self.calendars
+                cals = data.get("calendars") or []
+                if not isinstance(cals, list) or not cals:
+                    return {"ok": False, "error": "캘린더 목록이 없습니다."}
+                # 실서버와 같게: 수정시각을 안 보내는 예전 앱이 더 최신 값을 덮지 못하게 막습니다.
+                if not any(c.get("updatedAt") for c in cals) and any(c.get("updatedAt") for c in self.calendars):
+                    return {"ok": False, "error": "예전 버전 앱에서는 캘린더를 저장할 수 없습니다."}
+                self.calendars = [dict(c) for c in cals]
                 return {"ok": True, "count": len(self.calendars)}
             if action == "saveAll":
                 events = data.get("events")
@@ -88,6 +98,9 @@ class Backend:
                 if not events and self.events and data.get("clear") is not True:
                     return {"ok": False, "error": "올릴 일정이 없어 지우지 않았습니다."}
                 self.events = {e["id"]: dict(e) for e in events if e.get("id")}
+                cals = data.get("calendars")
+                if isinstance(cals, list) and cals:
+                    self.calendars = [dict(c) for c in cals]
                 return {"ok": True, "events": len(self.events)}
             if action == "exportToGoogleCalendar":
                 return {"ok": True, "googleId": "gid-mock", "calendar": "기본"}
@@ -118,11 +131,21 @@ def check(name, cond, detail=""):
         failures.append(f"{name}: {detail}")
 
 
+PUMP = [None]   # 기다리는 동안에도 브라우저 쪽 요청을 처리해 주기 위한 페이지
+
+
 def wait_until(fn, timeout=6.0, step=0.15):
     end = time.time() + timeout
     while time.time() < end:
         if fn():
             return True
+        # time.sleep 은 Playwright 드라이버를 멈춰 모의 백엔드 응답이 처리되지 않습니다.
+        if PUMP[0] is not None:
+            try:
+                PUMP[0].wait_for_timeout(int(step * 1000))
+                continue
+            except Exception:
+                pass
         time.sleep(step)
     return False
 
@@ -156,6 +179,29 @@ def edit_title(page, old, new):
     page.wait_for_timeout(500)
 
 
+def cal_names(page):
+    return page.evaluate("JSON.parse(localStorage.getItem('pcal.cals.v1')||'[]').map(c=>c.name)")
+
+
+def cal_ids(page):
+    return page.evaluate("JSON.parse(localStorage.getItem('pcal.cals.v1')||'[]').map(c=>c.id)")
+
+
+def open_cal_editor(page, cal_id):
+    """사이드바의 캘린더 이름(편집 진입점)을 실제 클릭합니다."""
+    page.evaluate(
+        "id => { const el=document.querySelector('[data-editcal=\"' + id + '\"]');"
+        " if(el) el.click(); }", cal_id)
+    page.wait_for_timeout(300)
+
+
+def rename_cal(page, cal_id, new_name):
+    open_cal_editor(page, cal_id)
+    page.fill("#cName", new_name)
+    page.click("#cSave")
+    page.wait_for_timeout(700)
+
+
 def seed(ctx, events):
     """앱이 처음 켜지기 전 상태(localStorage)를 심습니다 — 이미 시트 주소를 넣어 둔 기기."""
     js = """
@@ -172,9 +218,27 @@ def seed(ctx, events):
     ctx.add_init_script(js)
 
 
+def seed_raw(ctx, events, cals, url=None):
+    """캘린더 이름을 직접 고쳐 둔 기기처럼 심습니다(url=None 이면 아직 시트에 연결하지 않은 기기)."""
+    url_js = ("localStorage.setItem('pcal.url', %s);" % json.dumps(url)) if url else ""
+    js = """
+    try {
+      if(!localStorage.getItem('__seeded')){
+        localStorage.setItem('pcal.events.v1', %s);
+        localStorage.setItem('pcal.cals.v1', %s);
+        %s
+        localStorage.setItem('__seeded','1');
+      }
+      localStorage.setItem('pcal_demo_purged_v1','1');
+    } catch(e) {}
+    """ % (json.dumps(json.dumps(events or [])), json.dumps(json.dumps(cals)), url_js)
+    ctx.add_init_script(js)
+
+
 def new_page(ctx, tag="main", events=None):
     seed(ctx, events or [])
     page = ctx.new_page()
+    PUMP[0] = page
     wire_console(page, tag)
     page.goto(f"{BASE}/index.html", wait_until="load")
     page.wait_for_timeout(1200)
@@ -182,6 +246,16 @@ def new_page(ctx, tag="main", events=None):
 
 
 def mock_route(route):
+    try:
+        return _mock_route(route)
+    except Exception:            # 페이지 이동·새로고침으로 끊긴 요청은 그냥 버립니다(라우트가 막히지 않도록)
+        try:
+            route.abort()
+        except Exception:
+            pass
+
+
+def _mock_route(route):
     req = route.request
     q = urllib.parse.parse_qs(urllib.parse.urlparse(req.url).query)
     cb = (q.get("callback") or [""])[0]
@@ -214,7 +288,7 @@ with sync_playwright() as pw:
 
     # ---------------------------------------------------------------- 1. 초기 로드
     BACK.reset(SEED)
-    pc_ctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="ko-KR",
+    pc_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900}, locale="ko-KR",
                                  timezone_id="Asia/Seoul")
     pc_ctx.route("https://script.google.com/**", mock_route)
     pc = new_page(pc_ctx)
@@ -226,7 +300,7 @@ with sync_playwright() as pw:
           str(stored(pc, "pcal.sync.v1")))
 
     # ---------------------------------------------------------------- 2. 휴대폰 첫 로드
-    ph_ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1,
+    ph_ctx = browser.new_context(service_workers="block", viewport={"width": 390, "height": 844}, device_scale_factor=1,
                                  is_mobile=True, has_touch=True, locale="ko-KR",
                                  timezone_id="Asia/Seoul")
     ph_ctx.route("https://script.google.com/**", mock_route)
@@ -316,10 +390,11 @@ with sync_playwright() as pw:
     pc.wait_for_timeout(1200)
     n1 = len([c for c in BACK.calls if c == "load"])
     check("9_manual_refresh", n1 > n0, f"load {n0} → {n1}")
+    pc.close(); pc_ctx.close(); ph.close(); ph_ctx.close()   # 이후 검증에 영향 주지 않도록 정리
 
     # ---------------------------------------------------------------- 10. 큰 저장은 POST
     many = [ev(f"e-bulk-{i}", f"대량 일정 {i}", "2026-12-01T09:00", "2026-12-01T10:00") for i in range(40)]
-    bulk_ctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="ko-KR")
+    bulk_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900}, locale="ko-KR")
     bulk_ctx.route("https://script.google.com/**", mock_route)
     bulk = new_page(bulk_ctx, "bulk", events=many)
     bulk.click("#settingsBtn")
@@ -333,6 +408,7 @@ with sync_playwright() as pw:
     check("10_saveall_used_post", "saveAll" in BACK.calls, str(BACK.calls[-5:]))
     check("10_msg", "올렸" in bulk.inner_text("#setMsg") or "올" in bulk.inner_text("#setMsg"),
           bulk.inner_text("#setMsg"))
+    bulk.close(); bulk_ctx.close()
 
     # ---------------------------------------------------------------- 11. 시트가 빈 경우 이 기기 일정 보존
     BACK.reset([])
@@ -340,7 +416,7 @@ with sync_playwright() as pw:
         ev("e-local-1", "이 기기에만 있던 일정", "2026-11-29T09:00", "2026-11-29T10:00"),
         ev("e-local-2", "이 기기에만 있던 일정 둘", "2026-11-30"),
     ]
-    keep_ctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="ko-KR")
+    keep_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900}, locale="ko-KR")
     keep_ctx.route("https://script.google.com/**", mock_route)
     keep = new_page(keep_ctx, "keep", events=local_only)
     keep.wait_for_timeout(1500)
@@ -358,7 +434,7 @@ with sync_playwright() as pw:
     # ---------------------------------------------------------------- 12. #s= 링크로 연결한 기기도 기억함
     import base64
     b64 = base64.urlsafe_b64encode(MOCK_URL.encode()).decode().rstrip("=")
-    link_ctx = browser.new_context(viewport={"width": 390, "height": 844}, locale="ko-KR")
+    link_ctx = browser.new_context(service_workers="block", viewport={"width": 390, "height": 844}, locale="ko-KR")
     link_ctx.route("https://script.google.com/**", mock_route)
     link_ctx.add_init_script("localStorage.setItem('pcal_demo_purged_v1','1');")
     link = link_ctx.new_page()
@@ -381,6 +457,121 @@ with sync_playwright() as pw:
     keep.click("#cbOk")
     check("13_reset_clears_sheet", wait_until(lambda: len(BACK.events) == 0), str(BACK.events))
     check("13_reset_clears_local", len(titles(keep)) == 0, f"titles={titles(keep)}")
+    keep.close(); keep_ctx.close()
+
+    # ---------------------------------------------------------------- 15. PC에서 캘린더 이름 수정 → 시트·휴대폰 반영, 재동기화에도 유지
+    BACK.reset([ev("e-cal-1", "캘린더 테스트 일정", "2026-11-27T14:00", "2026-11-27T15:00")])
+    cal_pc_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900}, locale="ko-KR",
+                                    timezone_id="Asia/Seoul")
+    cal_pc_ctx.route("https://script.google.com/**", mock_route)
+    cal_pc = new_page(cal_pc_ctx, "calpc")
+    cal_ph_ctx = browser.new_context(service_workers="block", viewport={"width": 390, "height": 844}, is_mobile=True,
+                                     has_touch=True, locale="ko-KR", timezone_id="Asia/Seoul")
+    cal_ph_ctx.route("https://script.google.com/**", mock_route)
+    cal_ph = new_page(cal_ph_ctx, "calph")
+    check("15_initial_names", cal_names(cal_pc) == ["개인", "가족"], str(cal_names(cal_pc)))
+
+    rename_cal(cal_pc, "personal", "업무")
+    check("15_sheet_renamed", wait_until(lambda: BACK.calendars[0]["name"] == "업무", timeout=20), str(BACK.calendars))
+    check("15_sheet_timestamp", bool(BACK.calendars[0].get("updatedAt")), str(BACK.calendars[0]))
+    check("15_pc_local_kept", cal_names(cal_pc)[0] == "업무", str(cal_names(cal_pc)))
+    check("15_pc_ui_kept", "업무" in cal_pc.inner_text("#calList"), cal_pc.inner_text("#calList"))
+    check("15_pending_cleared", not stored(cal_pc, "pcal.calsync.v1").get("pending"),
+          str(stored(cal_pc, "pcal.calsync.v1")))
+
+    # 1분 주기·포커스 동기화가 여러 번 돌아도 시트의 옛 이름으로 되돌아가지 않아야 합니다.
+    for _ in range(3):
+        cal_pc.evaluate("window.dispatchEvent(new Event('focus'))")
+        cal_pc.wait_for_timeout(800)
+    check("15_pc_after_repulls", cal_names(cal_pc)[0] == "업무", str(cal_names(cal_pc)))
+    check("15_sheet_after_repulls", BACK.calendars[0]["name"] == "업무", str(BACK.calendars))
+
+    foreground(cal_ph)
+    check("15_phone_gets_rename", wait_until(lambda: cal_names(cal_ph)[0] == "업무", timeout=20), str(cal_names(cal_ph)))
+    check("15_phone_ui", "업무" in cal_ph.inner_text("#calList"), cal_ph.inner_text("#calList"))
+    cal_ph.screenshot(path=str(OUT / "03-phone-calendar-renamed.png"))
+
+    cal_pc.reload(wait_until="load")
+    cal_pc.wait_for_timeout(1600)
+    check("15_pc_after_reload", cal_names(cal_pc)[0] == "업무", str(cal_names(cal_pc)))
+
+    # ---------------------------------------------------------------- 16. 연결 전에 고쳐 둔 이름을 시트 기본값이 덮지 않는가
+    BACK.reset([ev("e-pre-1", "연결 전 일정", "2026-11-28T09:00", "2026-11-28T10:00")])
+    pre_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900}, locale="ko-KR",
+                                 timezone_id="Asia/Seoul")
+    pre_ctx.route("https://script.google.com/**", mock_route)
+    pre_cals = [
+        {"id": "personal", "name": "내 업무", "color": "#039be5", "visible": True, "order": 0},
+        {"id": "family", "name": "가족", "color": "#33b679", "visible": True, "order": 1},
+    ]
+    seed_raw(pre_ctx, [ev("e-pre-1", "연결 전 일정", "2026-11-28T09:00", "2026-11-28T10:00")], pre_cals, url=None)
+    pre = pre_ctx.new_page()
+    PUMP[0] = pre
+    wire_console(pre, "pre")
+    pre.goto(f"{BASE}/index.html", wait_until="load")
+    pre.wait_for_timeout(1000)
+    check("16_local_name_before_connect", cal_names(pre)[0] == "내 업무", str(cal_names(pre)))
+    check("16_no_pull_before_connect", stored(pre, "pcal.sync.v1").get("lastPull", 0) == 0,
+          str(stored(pre, "pcal.sync.v1")))
+    pre.click("#settingsBtn")
+    pre.wait_for_timeout(300)
+    pre.fill("#setUrl", MOCK_URL)
+    pre.click("#setConnect")
+    check("16_sheet_adopts_local_name", wait_until(lambda: BACK.calendars[0]["name"] == "내 업무", timeout=25),
+          str(BACK.calendars))
+    check("16_local_kept_after_connect", cal_names(pre)[0] == "내 업무", str(cal_names(pre)))
+    check("16_sheet_events_kept", "e-pre-1" in BACK.events, str(list(BACK.events)))
+
+    # ---------------------------------------------------------------- 17. 오프라인 이름 변경 → 대기열 → 복구 후 반영
+    sheet_before = BACK.calendars[0]["name"]
+    BACK.fail = True
+    rename_cal(cal_pc, "personal", "오프라인 이름")
+    check("17_local_kept", cal_names(cal_pc)[0] == "오프라인 이름", str(cal_names(cal_pc)))
+    check("17_pending", bool(stored(cal_pc, "pcal.calsync.v1").get("pending")),
+          str(stored(cal_pc, "pcal.calsync.v1")))
+    check("17_error_state", cal_pc.evaluate("document.querySelector('#syncChip').classList.contains('error')"))
+    check("17_sheet_kept_old", BACK.calendars[0]["name"] == sheet_before,
+          f"{sheet_before} → {BACK.calendars[0]['name']}")
+    cal_pc.evaluate("window.dispatchEvent(new Event('focus'))")
+    cal_pc.wait_for_timeout(1600)
+    check("17_not_reverted_while_pending", cal_names(cal_pc)[0] == "오프라인 이름", str(cal_names(cal_pc)))
+    BACK.fail = False
+    foreground(cal_pc)
+    check("17_flushed_to_sheet", wait_until(lambda: BACK.calendars[0]["name"] == "오프라인 이름", timeout=25),
+          str(BACK.calendars))
+    check("17_pending_cleared", wait_until(lambda: not stored(cal_pc, "pcal.calsync.v1").get("pending"), timeout=25),
+          str(stored(cal_pc, "pcal.calsync.v1")))
+    foreground(cal_ph)
+    check("17_phone_updated", wait_until(lambda: cal_names(cal_ph)[0] == "오프라인 이름", timeout=20), str(cal_names(cal_ph)))
+
+    # ---------------------------------------------------------------- 18. 캘린더 삭제 → 시트·다른 기기, 되살아나지 않음
+    open_cal_editor(cal_pc, "family")
+    cal_pc.click("#cDelete")
+    cal_pc.wait_for_timeout(300)
+    cal_pc.click("#cbOk")
+    cal_pc.wait_for_timeout(900)
+    check("18_sheet_removed", wait_until(lambda: all(c["id"] != "family" for c in BACK.calendars), timeout=20),
+          str(BACK.calendars))
+    check("18_pc_removed", "family" not in cal_ids(cal_pc), str(cal_ids(cal_pc)))
+    foreground(cal_ph)
+    check("18_phone_removed", wait_until(lambda: "family" not in cal_ids(cal_ph), timeout=20), str(cal_ids(cal_ph)))
+    for _ in range(2):
+        cal_pc.evaluate("window.dispatchEvent(new Event('focus'))")
+        cal_pc.wait_for_timeout(900)
+        foreground(cal_ph)
+    check("18_no_resurrect", all(c["id"] != "family" for c in BACK.calendars), str(BACK.calendars))
+    check("18_phone_no_resurrect", "family" not in cal_ids(cal_ph), str(cal_ids(cal_ph)))
+
+    # ---------------------------------------------------------------- 19. 캘린더 추가 → 다른 기기에 나타남
+    cal_pc.evaluate("document.querySelector('[data-addcal]').click()")
+    cal_pc.wait_for_timeout(300)
+    cal_pc.fill("#cName", "아이들")
+    cal_pc.click("#cSave")
+    check("19_sheet_added", wait_until(lambda: any(c["name"] == "아이들" for c in BACK.calendars), timeout=20),
+          str(BACK.calendars))
+    foreground(cal_ph)
+    check("19_phone_added", wait_until(lambda: "아이들" in cal_names(cal_ph), timeout=20), str(cal_names(cal_ph)))
+    cal_pc.screenshot(path=str(OUT / "04-pc-calendar-list.png"))
 
     # ---------------------------------------------------------------- 13. 콘솔 오류
     check("14_no_console_errors", not errors, json.dumps(errors[:5], ensure_ascii=False))

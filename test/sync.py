@@ -355,15 +355,35 @@ with sync_playwright() as pw:
     keep.wait_for_timeout(1000)
     check("11_push_local_only", wait_until(lambda: len(BACK.events) == 2), str(BACK.events))
 
-    # ---------------------------------------------------------------- 12. 전체 삭제는 시트에도 반영
+    # ---------------------------------------------------------------- 12. #s= 링크로 연결한 기기도 기억함
+    import base64
+    b64 = base64.urlsafe_b64encode(MOCK_URL.encode()).decode().rstrip("=")
+    link_ctx = browser.new_context(viewport={"width": 390, "height": 844}, locale="ko-KR")
+    link_ctx.route("https://script.google.com/**", mock_route)
+    link_ctx.add_init_script("localStorage.setItem('pcal_demo_purged_v1','1');")
+    link = link_ctx.new_page()
+    wire_console(link, "link")
+    BACK.reset([ev("e-link", "링크로 연결한 일정", "2026-11-27T13:00", "2026-11-27T14:00")])
+    link.goto(f"{BASE}/index.html#s={b64}", wait_until="load")
+    link.wait_for_timeout(1500)
+    check("12_hash_link_loads", "링크로 연결한 일정" in titles(link), f"titles={titles(link)}")
+    link.goto(f"{BASE}/index.html", wait_until="load")       # 홈 화면 앱처럼 해시 없이 다시 열기
+    link.wait_for_timeout(1500)
+    check("12_hash_link_remembered",
+          link.evaluate("localStorage.getItem('pcal.url')") == MOCK_URL and "링크로 연결한 일정" in titles(link),
+          f"url={link.evaluate('localStorage.getItem(\'pcal.url\')')} titles={titles(link)}")
+    check("12_hash_link_pulls", stored(link, "pcal.sync.v1").get("lastPull", 0) > 0)
+    link_ctx.close()
+
+    # ---------------------------------------------------------------- 13. 전체 삭제는 시트에도 반영
     keep.click("#setReset")
     keep.wait_for_timeout(300)
     keep.click("#cbOk")
-    check("12_reset_clears_sheet", wait_until(lambda: len(BACK.events) == 0), str(BACK.events))
-    check("12_reset_clears_local", len(titles(keep)) == 0, f"titles={titles(keep)}")
+    check("13_reset_clears_sheet", wait_until(lambda: len(BACK.events) == 0), str(BACK.events))
+    check("13_reset_clears_local", len(titles(keep)) == 0, f"titles={titles(keep)}")
 
     # ---------------------------------------------------------------- 13. 콘솔 오류
-    check("13_no_console_errors", not errors, json.dumps(errors[:5], ensure_ascii=False))
+    check("14_no_console_errors", not errors, json.dumps(errors[:5], ensure_ascii=False))
 
     browser.close()
 

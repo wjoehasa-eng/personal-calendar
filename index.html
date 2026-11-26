@@ -2257,6 +2257,8 @@ function bind(){
   $('#setConnect').addEventListener('click',()=>connectSheet($('#setUrl').value));
   $('#setDisconnect').addEventListener('click',()=>{
     state.url=''; localStorage.removeItem(LS.url);
+    // 주소에 남아 있는 #s= 링크도 지워 다시 열 때 되살아나지 않게 합니다.
+    if(readHash()){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} }
     setSync('off'); setStatus('로컬'); setSyncInfo();
     setMsg('연결을 끊었습니다. 일정은 이 브라우저에 남아 있어요.'+(pendingCount()?`\n시트에 못 올린 변경 ${pendingCount()}건은 다시 연결하면 올라갑니다.`:''));
     toast('시트 연결을 끊었어요');
@@ -2416,7 +2418,12 @@ function init(){
   loadSyncStore();
   const qs=new URLSearchParams(location.search);
   const hashUrl=readHash();
-  if(hashUrl) state.url=hashUrl;
+  if(hashUrl){
+    state.url=hashUrl;
+    // #s= 링크로 연결한 경우에도 저장해 둡니다 — 홈 화면 앱(start_url "./")이나
+    // 나중에 해시 없이 열 때도 계속 같은 시트를 쓰도록.
+    try{ if(localStorage.getItem(LS.url)!==hashUrl) localStorage.setItem(LS.url, hashUrl); }catch(e){}
+  }
   else state.url=localStorage.getItem(LS.url)||'';
   if(!state.cals.length) state.cals=defaultCals();
   purgeSavedDemo();

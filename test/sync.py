@@ -355,8 +355,15 @@ with sync_playwright() as pw:
     keep.wait_for_timeout(1000)
     check("11_push_local_only", wait_until(lambda: len(BACK.events) == 2), str(BACK.events))
 
-    # ---------------------------------------------------------------- 12. 콘솔 오류
-    check("12_no_console_errors", not errors, json.dumps(errors[:5], ensure_ascii=False))
+    # ---------------------------------------------------------------- 12. 전체 삭제는 시트에도 반영
+    keep.click("#setReset")
+    keep.wait_for_timeout(300)
+    keep.click("#cbOk")
+    check("12_reset_clears_sheet", wait_until(lambda: len(BACK.events) == 0), str(BACK.events))
+    check("12_reset_clears_local", len(titles(keep)) == 0, f"titles={titles(keep)}")
+
+    # ---------------------------------------------------------------- 13. 콘솔 오류
+    check("13_no_console_errors", not errors, json.dumps(errors[:5], ensure_ascii=False))
 
     browser.close()
 

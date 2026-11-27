@@ -2982,7 +2982,7 @@ function saveModal(){
   const wasNew=editing.isNew;
   const series=wasNew?null:state.events.find(x=>x.id===editing.ev.id);
   const occDate=editing.occDate;
-  if(series && evIsRepeating(series) && occDate && occDate!==firstOccDate(series)){
+  if(series && evIsRepeating(series) && occDate){
     scopeDialog({
       title:'반복 일정 수정',
       body:'"'+(series.title||'(제목 없음)')+'" '+occDate+' 회차를 고쳤습니다.\n어느 범위에 적용할까요?'
@@ -3007,7 +3007,7 @@ function upsertEvent(ev){
 }
 function deleteEvent(ev, occDate){
   const series=state.events.find(x=>x.id===ev.id);
-  if(series && evIsRepeating(series) && occDate && occDate!==firstOccDate(series)){
+  if(series && evIsRepeating(series) && occDate){
     return scopeDialog({
       title:'반복 일정 삭제',
       body:'"'+(series.title||'(제목 없음)')+'" '+occDate+' 회차를 지웁니다.\n어느 범위를 지울까요?'
@@ -4279,7 +4279,7 @@ function kSaveModal(){
   const wasNew=kidEditing.isNew;
   const series=wasNew?null:kidData.events.find(function(x){ return x.id===kidEditing.draft.id; });
   const occDate=kidEditing.occDate;
-  if(series && series.rrule && occDate && occDate!==kFirstOcc(series)){
+  if(series && series.rrule && occDate){
     scopeDialog({
       title:'육아 일정 수정',
       body:'"'+(series.title||'(제목 없음)')+'" '+kLabel(occDate)+' 회차를 고쳤습니다.\n어느 범위에 적용할까요?'
@@ -4357,7 +4357,7 @@ function kDeleteModal(){
   const ev=kidEditing.draft;
   const series=kidData.events.find(function(x){ return x.id===ev.id; });
   const occDate=kidEditing.occDate;
-  if(series && series.rrule && occDate && occDate!==kFirstOcc(series)){
+  if(series && series.rrule && occDate){
     scopeDialog({
       title:'육아 일정 삭제',
       body:'"'+(series.title||'(제목 없음)')+'" '+kLabel(occDate)+' 회차를 지웁니다.\n어느 범위를 지울까요?'

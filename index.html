@@ -3677,6 +3677,7 @@ function kMatchFilter(ev){
 }
 function kColorOf(ev){
   const ids=kKidsOf(ev);
+  if(ids.length>=2) return '#10B981';
   if(ids.length===1){ const c=kKidById(ids[0]); if(c) return c.color; }
   return (KCATS[ev.cat]||KCATS.etc).color;
 }

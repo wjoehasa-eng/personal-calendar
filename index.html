@@ -198,7 +198,12 @@ input[type=date],input[type=time]{font-family:inherit}
 .cal-name{font-size:13px;color:#3c4043;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;cursor:pointer}
 .cal-row.off .cal-name{color:#9aa0a6}
 .cal-row .row-more{opacity:0}
-.cal-row:hover .row-more{opacity:1}
+.cal-row .cal-moves{display:flex;align-items:center;gap:1px;opacity:0;transition:opacity .12s;margin-left:auto}
+.cal-row .cal-move{width:20px;height:20px;border-radius:4px;font-size:10px;color:#5f6368;display:inline-flex;align-items:center;justify-content:center}
+.cal-row .cal-move:hover:not([disabled]){background:rgba(0,0,0,.08);color:#202124}
+.cal-row .cal-move[disabled]{opacity:.22;cursor:default}
+.cal-row:hover .row-more,.cal-row:hover .cal-moves,.cal-row:focus-within .row-more,.cal-row:focus-within .cal-moves{opacity:1}
+@media (hover:none){ .cal-row .row-more,.cal-row .cal-moves{opacity:1} }
 .cal-more-wrap{position:relative}
 .hint-card{
   margin-top:auto;background:#f8f9fa;border-radius:12px;padding:12px 14px;font-size:12px;line-height:1.55;color:#5f6368;
@@ -361,8 +366,8 @@ input[type=date],input[type=time]{font-family:inherit}
 
 /* ============================================================ 팝오버 */
 .qa{
-  position:fixed;z-index:150;width:320px;background:#fff;border-radius:8px;box-shadow:var(--shadow-3);
-  padding:14px 14px 10px;font-size:13px;
+  position:fixed;z-index:150;width:380px;max-width:calc(100vw - 20px);background:#fff;border-radius:10px;box-shadow:var(--shadow-3);
+  padding:14px 16px 12px;font-size:13px;
 }
 .qa-top{display:flex;align-items:center;gap:6px}
 .qa input#qaTitle{border:0;border-bottom:2px solid var(--line2);outline:0;flex:1 1 auto;min-width:0;font-size:15px;padding:4px 2px 8px;transition:border-color .15s}
@@ -375,10 +380,13 @@ input[type=date],input[type=time]{font-family:inherit}
 .qa-chip:hover{background:var(--hover)}
 .qa-chip.on{background:var(--sel);border-color:#c6dafc;color:#174ea6}
 .qa-chip .dot{width:10px;height:10px;border-radius:50%}
-.qa-times{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.qa-times input{border:1px solid var(--line2);border-radius:4px;padding:4px 6px;font-size:12px;min-width:0}
-.qa-times input[type=date]{width:130px}
-.qa-times input[type=time]{width:88px}
+.qa-times{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.qa-times input,.qa-dates input,.qa-rep select{border:1px solid var(--line2);border-radius:4px;padding:4px 6px;font-size:12px;min-width:0;background:#fff}
+.qa-dates{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+.qa-dates input[type=date]{flex:1 1 124px;min-width:0}
+.qa-times input[type=time]{width:92px}
+.qa-rep{display:flex;align-items:center;gap:6px;margin-top:8px}
+.qa-rep select{flex:1 1 auto}
 
 .pop{
   position:fixed;z-index:150;width:344px;max-width:calc(100vw - 24px);background:#fff;border-radius:8px;
@@ -964,17 +972,33 @@ body.tab-kids .sidebar{display:none}
     <input id="qaTitle" placeholder="제목 추가" autocomplete="off">
     <button type="button" class="qa-close" id="qaClose" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
   </div>
+  <div class="qa-dates">
+    <input type="date" id="qaDate" aria-label="시작일">
+    <span class="dash">–</span>
+    <input type="date" id="qaEndDate" aria-label="종료일">
+  </div>
+  <div class="qa-times" id="qaTimes" hidden>
+    <input type="time" id="qaStart" aria-label="시작 시간">
+    <span class="dash">–</span>
+    <input type="time" id="qaEnd" aria-label="종료 시간">
+  </div>
+  <div class="qa-rep">
+    <select id="qaRepeat" aria-label="반복">
+      <option value="none">반복 안 함</option>
+      <option value="daily">매일</option>
+      <option value="weekly">매주</option>
+      <option value="biweekly">격주</option>
+      <option value="monthly">매월</option>
+      <option value="yearly">매년</option>
+    </select>
+  </div>
+  <div class="cal-picker" id="qaCalPicker" style="margin-top:8px"></div>
   <div class="qa-row">
     <button class="qa-chip" id="qaTimeBtn">🕘 시간</button>
     <button class="qa-chip" id="qaAllDayBtn">종일</button>
+    <button class="btn text sm" id="qaMore">더보기</button>
     <span class="spacer"></span>
     <button class="btn primary sm" id="qaSave">저장</button>
-  </div>
-  <div class="cal-picker" id="qaCalPicker" style="margin-top:8px"></div>
-  <div class="qa-times" id="qaTimes" hidden>
-    <input type="date" id="qaDate">
-    <input type="time" id="qaStart">
-    <input type="time" id="qaEnd">
   </div>
 </div>
 
@@ -2334,14 +2358,30 @@ function renderViewTabs(){
 }
 
 function renderCalList(){
-  $('#calList').innerHTML=state.cals.map(c=>{
+  $('#calList').innerHTML=state.cals.map((c,i)=>{
     const on=c.visible!==false;
     return `<div class="cal-row ${on?'on':'off'}">
       <button class="cal-check" data-toggle="${c.id}" aria-label="${esc(c.name)} 표시 전환" style="background:${on?c.color:'transparent'};border-color:${on?c.color:'#8f9396'}"><svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></button>
       <span class="cal-name" data-editcal="${c.id}">${esc(c.name)}</span>
+      <span class="cal-moves">
+        <button type="button" class="cal-move" data-movecal="${c.id}" data-dir="-1" aria-label="${esc(c.name)} 위로" ${i===0?'disabled':''}>▲</button>
+        <button type="button" class="cal-move" data-movecal="${c.id}" data-dir="1" aria-label="${esc(c.name)} 아래로" ${i===state.cals.length-1?'disabled':''}>▼</button>
+      </span>
       <button class="icon-btn sm row-more" data-editcal="${c.id}" aria-label="${esc(c.name)} 설정"><svg viewBox="0 0 24 24"><path d="M12 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg></button>
     </div>`;
   }).join('')+`<div class="cal-row" style="height:32px"><button class="cal-name" data-addcal="1" style="color:#1a73e8;font-weight:500;font-size:12px">+ 다른 캘린더 추가</button></div>`;
+}
+function moveCal(id,dir){
+  const i=state.cals.findIndex(c=>String(c.id)===String(id));
+  const j=i+dir;
+  if(i<0||j<0||j>=state.cals.length) return;
+  const item=state.cals.splice(i,1)[0];
+  state.cals.splice(j,0,item);
+  const now=new Date().toISOString();
+  state.cals.forEach((c,idx)=>{ c.order=idx; c.updatedAt=now; });
+  calsMeta.edited=true; saveCalsMeta();
+  persistLocal(); renderAll();
+  if(state.url) queueCals();
 }
 
 function renderMini(){
@@ -2656,13 +2696,15 @@ function openQuickAdd(o){
   qaState={date:o.date||YMD(state.cursor), start:o.start||'09:00', allDay:isAllDay, calId:calId};
   $('#qaTitle').value='';
   $('#qaDate').value=qaState.date;
+  $('#qaEndDate').value=qaState.date;
   $('#qaStart').value=qaState.start;
   $('#qaEnd').value=addMin(qaState.start,60);
+  $('#qaRepeat').value='none';
   $('#qaTimes').hidden=qaState.allDay;
   $('#qaTimeBtn').classList.toggle('on',!qaState.allDay);
   $('#qaAllDayBtn').classList.toggle('on',qaState.allDay);
   renderQaCalPicker(calId);
-  positionAt($('#qa'), o.x==null?(innerWidth/2-160):o.x, o.y==null?120:o.y);
+  positionAt($('#qa'), o.x==null?(innerWidth/2-190):o.x, o.y==null?120:o.y);
   setTimeout(()=>{ $('#qaTitle').focus(); },10);
 }
 function renderQaCalPicker(sel){
@@ -2672,17 +2714,28 @@ function closeQuickAdd(){ hide($('#qa')); qaState=null; }
 function saveQuickAdd(){
   if(!qaState) return;
   const title=$('#qaTitle').value.trim()||'(제목 없음)';
+  const sd=$('#qaDate').value||qaState.date;
+  let ed=$('#qaEndDate').value||sd;
+  if(ed<sd) ed=sd;
   let ev;
   if(qaState.allDay){
-    ev={allDay:true,start:qaState.date,end:qaState.date};
+    ev={allDay:true,start:sd,end:ed};
   } else {
     const st=$('#qaStart').value||'09:00';
     let en=$('#qaEnd').value||addMin(st,60);
-    let ed=qaState.date;
-    if(en<=st){ ed=YMD(addDays(parseYMD(qaState.date),1)); }
-    ev={allDay:false,start:qaState.date+'T'+st,end:ed+'T'+en};
+    if(ed===sd && en<=st){ ed=YMD(addDays(parseYMD(sd),1)); }
+    ev={allDay:false,start:sd+'T'+st,end:ed+'T'+en};
   }
-  const full=Object.assign({id:uid(),title:title,calId:qaState.calId,repeat:'none',location:'',memo:'',color:'',done:false,googleId:'',googleSentAt:'',updatedAt:new Date().toISOString()},ev);
+  const rep=$('#qaRepeat').value||'none';
+  let repeat='none', rrule='';
+  if(rep!=='none'){
+    const map={daily:'DAILY',weekly:'WEEKLY',biweekly:'WEEKLY',monthly:'MONTHLY',yearly:'YEARLY'};
+    const freq=map[rep]||'WEEKLY';
+    const iv=(rep==='biweekly')?2:1;
+    repeat=(rep==='biweekly')?'custom':rep;
+    rrule=rruleBuild({freq:freq,interval:iv,byday:(freq==='WEEKLY'?[BYDAY[parseYMD(sd).getDay()]]:[]),endType:'never',until:'',count:0});
+  }
+  const full=Object.assign({id:uid(),title:title,calId:qaState.calId,repeat:repeat,rrule:rrule,exdates:[],location:'',memo:'',color:'',done:false,googleId:'',googleSentAt:'',updatedAt:new Date().toISOString()},ev);
   upsertEvent(full);
   closeQuickAdd();
   toast('일정을 추가했어요');
@@ -4540,6 +4593,20 @@ function bind(){
     if(!qaState) return;
     qaState.allDay=true; $('#qaTimes').hidden=true; $('#qaAllDayBtn').classList.add('on'); $('#qaTimeBtn').classList.remove('on');
   });
+  $('#qaDate').addEventListener('change',()=>{
+    const sd=$('#qaDate').value;
+    if(sd && (!$('#qaEndDate').value || $('#qaEndDate').value<sd)) $('#qaEndDate').value=sd;
+  });
+  $('#qaMore').addEventListener('click',()=>{
+    if(!qaState) return;
+    const sd=$('#qaDate').value||qaState.date;
+    const ed=($('#qaEndDate').value&&$('#qaEndDate').value>=sd)?$('#qaEndDate').value:sd;
+    const allDay=qaState.allDay, calId=qaState.calId;
+    const start=$('#qaStart').value||'09:00', end=$('#qaEnd').value||addMin(start,60);
+    const title=$('#qaTitle').value.trim();
+    closeQuickAdd();
+    openModal({date:sd,endDate:ed,allDay:allDay,calId:calId,start:start,end:end,title:title});
+  });
   $('#qaCalPicker').addEventListener('click',e=>{
     const b=e.target.closest('[data-qacal]'); if(!b||!qaState) return;
     qaState.calId=b.dataset.qacal;
@@ -4716,6 +4783,7 @@ function bind(){
     if(day){ gotoDay(day.dataset.dayview); return; }
     const mini=e.target.closest('[data-mini]'); if(mini){ jumpTo(mini.dataset.mini); return; }
     const tog=e.target.closest('[data-toggle]'); if(tog){ toggleCal(tog.dataset.toggle); return; }
+    const mv=e.target.closest('[data-movecal]'); if(mv){ moveCal(mv.dataset.movecal,Number(mv.dataset.dir)); return; }
     const ed=e.target.closest('[data-editcal]'); if(ed){ openCalModal(ed.dataset.editcal); return; }
     const add=e.target.closest('[data-addcal]'); if(add){ openCalModal(); return; }
     const pick=e.target.closest('[data-color]'); if(pick) return;
@@ -5262,9 +5330,10 @@ function fbApplyDoc(col,id,type,data){
     const i=state.cals.findIndex(function(x){ return String(x.id)===String(id); });
     if(i>=0){
       if(fbSig(fbCalToDoc(state.cals[i]))===fbSig(doc)) return false;
-      state.cals[i]=c; return true;
-    }
-    state.cals.push(c); return true;
+      state.cals[i]=c;
+    } else state.cals.push(c);
+    state.cals.sort(function(a,b){ return (a.order||0)-(b.order||0); });
+    return true;
   }
   const ev=fbKidFromDoc(data,id);
   if(!ev) return false;

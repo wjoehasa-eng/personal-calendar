@@ -2860,7 +2860,7 @@ function timeText(o){
   return `${dateShort(o.start)} ${fmtTime(o.start)} – ${dateShort(o.end)} ${fmtTime(o.end)}`;
 }
 function openKidPop(id,date,x,y){
-  const ev=kidEvents().find(function(k){ return k.id===id; }); if(!ev) return;
+  const ev=kidData.events.find(function(k){ return k.id===id; }); if(!ev) return;
   currentPop='kid:'+id+'@'+(date||ev.date||''); popXY={x:x,y:y};
   $('#popDot').style.background=kColorOf(ev);
   $('#popTitle').textContent=ev.title||'(제목 없음)';
@@ -4618,7 +4618,7 @@ function bindKids(){
     if(add){ openKidModal(null,add.dataset.kadd); return; }
     const kev=e.target.closest('[data-kev]');
     if(kev){
-      if(state.view==='kid-week'){ openKidPop(kev.dataset.kev,kev.dataset.kdate||null,e.clientX,e.clientY); return; }
+      if(state.tab==='kidWeek'){ openKidPop(kev.dataset.kev,kev.dataset.kdate||null,e.clientX,e.clientY); return; }
       openKidModal(kev.dataset.kev,kev.dataset.kdate||null); return;
     }
     const pkev=e.target.closest('[data-pkev]');

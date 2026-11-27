@@ -4711,7 +4711,8 @@ function bind(){
   $('#fbgOff').addEventListener('click',fbTurnOff);
   $('#fbgSettings').addEventListener('click',()=>{ FB.gateHidden=true; fbRender(); openSettings(); });
   $('#setClose').addEventListener('click',closeSettings);
-  window.addEventListener('online',function(){ if(fbMode()){ fbRender(); if(FB.user) fbMirror(); } });
+  window.addEventListener('online',function(){ if(fbMode()){ fbRender(); if(FB.user){ fbMirror(); fbPullSheetInbox(); } } });
+  document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible'&&fbMode()&&FB.user) fbPullSheetInbox(); });
   window.addEventListener('offline',function(){ if(fbMode()) fbRender(); });
   $('#setRefresh').addEventListener('click',manualSync);
   $('#setClose').addEventListener('click',()=>hide($('#settings')));
@@ -5396,7 +5397,53 @@ function fbFirstCheck(){
   if(!FB.seeded){
     FB.seeded=true;
     fbMirror();                     // 이 브라우저에만 있던 일정·캘린더·육아 데이터를 id 기준으로 병합
+    fbPullSheetInbox();             // 시트 Inbox(피클 추천 일정)가 있으면 Firebase로 자동 흡수
   }
+}
+let fbInboxAt=0;
+function fbPullSheetInbox(){
+  if(!fbMode()||!FB.user||!FB.seeded||!FB.sheetUrl) return;
+  const now=Date.now();
+  if(now-fbInboxAt<45000) return;
+  fbInboxAt=now;
+  let doneMap={};
+  try{ doneMap=JSON.parse(localStorage.getItem('pcal.inbox.done')||'{}')||{}; }catch(e){}
+  jsonp(FB.sheetUrl,{action:'load'}).then(function(r){
+    if(!r||!r.ok||!Array.isArray(r.events)) return;
+    const pickleCal=state.cals.find(function(c){ return c.name==='피클'||c.id==='피클'; });
+    const targetCalId=pickleCal?pickleCal.id:firstCalId();
+    let added=0;
+    r.events.forEach(function(e){
+      const id=String((e&&e.id)||'');
+      if(!id.startsWith('pickle-')||doneMap[id]) return;
+      if(state.events.some(function(x){ return String(x.id)===id; })){ doneMap[id]=1; return; }
+      const allDay=(e.allDay==='Y'||e.allDay===true);
+      const ev={
+        id:id,
+        title:String(e.title||'(제목 없음)'),
+        start:allDay?String(e.start||'').slice(0,10):String(e.start||''),
+        end:allDay?String(e.end||e.start||'').slice(0,10):String(e.end||e.start||''),
+        allDay:allDay,
+        repeat:String(e.repeat||'none')||'none',
+        rrule:String(e.rrule||''),
+        exdates:[],
+        calId:targetCalId,
+        location:String(e.location||''),
+        memo:String(e.memo||''),
+        color:String(e.color||''),
+        done:false,
+        googleId:'',
+        googleSentAt:'',
+        updatedAt:new Date().toISOString()
+      };
+      if(!ev.start) return;
+      upsertEvent(ev);
+      doneMap[id]=1; added++;
+      try{ jsonp(FB.sheetUrl,{action:'deleteEvent',id:id}); }catch(err){}
+    });
+    try{ localStorage.setItem('pcal.inbox.done',JSON.stringify(doneMap)); }catch(e){}
+    if(added) toast('피클 추천 일정 '+added+'건을 가져왔어요');
+  }).catch(function(){});
 }
 
 /* --------------------------------------------------------- 보내기 (바뀐 것만) */

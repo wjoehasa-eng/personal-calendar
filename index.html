@@ -850,7 +850,7 @@ body.tab-kids .sidebar{display:none}
         <rect x="8.5" y="8.5" width="19" height="19" rx="2" fill="#fff"/>
         <text x="18" y="23.5" text-anchor="middle" font-size="12" font-family="Arial,Helvetica,sans-serif" font-weight="700" fill="#1a73e8">31</text>
       </svg>
-      <span class="bname">내 캘린더</span>
+      <span class="bname" id="bname" title="클릭해서 이름 바꾸기" style="cursor:pointer">내 캘린더</span>
     </div>
     <button class="today-btn" id="todayBtn">오늘</button>
     <div class="navgroup">
@@ -1278,6 +1278,15 @@ body.tab-kids .sidebar{display:none}
         <div class="hint" id="setKidsInfo"></div>
       </div>
       <div class="field">
+        <span class="ficon">🏷️</span>
+        <div class="fbody">
+          <div class="row"><span style="font-size:13px">캘린더 제목</span>
+            <input type="text" id="setAppTitle" maxlength="20" placeholder="내 캘린더" style="width:160px">
+          </div>
+          <div class="hint">왼쪽 위 상단에 표시되는 이름입니다. 상단 글자를 직접 눌러도 바꿀 수 있어요.</div>
+        </div>
+      </div>
+      <div class="field">
         <span class="ficon">🗓️</span>
         <div class="fbody">
           <div class="row"><span style="font-size:13px">주 시작</span>
@@ -1429,7 +1438,7 @@ function evColor(ev, cal){
   if(ev && ev.done) return DONE_COLOR;
   return (ev && ev.color) || (cal && cal.color) || '#039be5';
 }
-const PREFS = {weekStart:0};
+const PREFS = {weekStart:0, appTitle:'내 캘린더'};
 const TODAY = startOfDay(new Date());
 const HOUR_H = 48;
 const state = {events:[], cals:[], url:'', view:'month', cursor:new Date(TODAY), miniCursor:new Date(TODAY), online:false, _timeAnchor:''};
@@ -1493,6 +1502,7 @@ function loadLocal(){
     if(Array.isArray(e)) state.events=e;
     if(Array.isArray(c)) state.cals=c;
     if(typeof p.weekStart==='number') PREFS.weekStart=p.weekStart;
+    if(typeof p.appTitle==='string'&&p.appTitle.trim()) PREFS.appTitle=p.appTitle.trim().slice(0,20);
   }catch(e){}
 }
 
@@ -2324,11 +2334,20 @@ function rangeLabel(s,e){
   if(s.getMonth()!==e.getMonth()) return `${s.getFullYear()}년 ${s.getMonth()+1}월 ${s.getDate()}일 – ${e.getMonth()+1}월 ${e.getDate()}일`;
   return `${s.getFullYear()}년 ${s.getMonth()+1}월 ${s.getDate()}일 – ${e.getDate()}일`;
 }
+function setAppTitle(v){
+  const t=String(v||'').trim().slice(0,20)||'내 캘린더';
+  if(t===PREFS.appTitle) return;
+  PREFS.appTitle=t;
+  persistLocal(); renderHeader();
+  fbMirrorSoon();
+}
 function renderHeader(){
+  const appT=PREFS.appTitle||'내 캘린더';
+  const bn=$('#bname'); if(bn) bn.textContent=appT;
   if(state.tab!=='cal'){
     const t=(state.tab==='kidHome'?'육아 홈':'시간표');
     $('#htitle').textContent=t;
-    document.title=t+' · 내 캘린더';
+    document.title=t+' · '+appT;
     return;
   }
   const v=state.view, c=state.cursor, short=innerWidth<=768;
@@ -2342,7 +2361,7 @@ function renderHeader(){
   else t=short?'예정된 일정':'예정된 일정';
   $('#htitle').textContent=t;
   renderViewTabs();
-  document.title=(t?t+' · ':'')+'내 캘린더';
+  document.title=(t?t+' · ':'')+(PREFS.appTitle||'내 캘린더');
 }
 
 /* 보기 전환 탭 — PC는 상단 바, 모바일은 바 아래 줄에 같은 4개를 그립니다 */
@@ -3449,6 +3468,7 @@ function openSettings(){
   $('#setUrl').value=FB.sheetUrl||state.url;
   setStatus(fbMode()?'쉼':(state.url?'연결됨':'로컬'));
   $('#setWeekStart').value=String(PREFS.weekStart);
+  $('#setAppTitle').value=PREFS.appTitle||'내 캘린더';
   $('#setVersion').textContent='내 캘린더 v2.0.0 · 일정 '+state.events.length+'개 · 캘린더 '+state.cals.length+'개 · 육아 일정 '+kidData.events.length+'개'+(fbMode()?' · Firebase 실시간 동기화':'');
   fbFillConfig();
   renderKidsSettings();
@@ -4750,6 +4770,14 @@ function bind(){
       setSyncInfo();
     });
   });
+  $('#bname').addEventListener('click',()=>{
+    const v=prompt('상단에 표시할 캘린더 제목을 입력하세요',PREFS.appTitle||'내 캘린더');
+    if(v!==null) setAppTitle(v);
+  });
+  $('#setAppTitle').addEventListener('change',e=>{
+    setAppTitle(e.target.value);
+    e.target.value=PREFS.appTitle;
+  });
   $('#setWeekStart').addEventListener('change',e=>{
     PREFS.weekStart=Number(e.target.value)||0;
     persistLocal(); renderAll();
@@ -5246,10 +5274,10 @@ function fbKidsProfileDoc(){
   });
   let stamp='';
   (kidData.children||[]).forEach(function(c){ if(fbStr(c.updatedAt)>stamp) stamp=fbStr(c.updatedAt); });
-  return {children:kids, updatedAt:stamp};
+  return {children:kids, appTitle:fbStr(PREFS.appTitle||'내 캘린더'), updatedAt:stamp};
 }
 function fbKidsProfileFromDoc(d){
-  return {children:kNormKids((d&&d.children)||[]), updatedAt:fbStr(d&&d.updatedAt)};
+  return {children:kNormKids((d&&d.children)||[]), appTitle:fbStr(d&&d.appTitle), updatedAt:fbStr(d&&d.updatedAt)};
 }
 
 /* --------------------------------------------------------- 받기 (onSnapshot) */
@@ -5289,9 +5317,10 @@ function fbApplyDoc(col,id,type,data){
     if(type==='removed'){ FB.known.profile=null; return false; }
     const doc=fbKidsProfileFromDoc(data);
     FB.known.profile=doc;
-    if(fbSig(doc.children)===fbSig(kidData.children)) return false;
-    kidData.children=doc.children;
-    return true;
+    let changed=false;
+    if(doc.appTitle && doc.appTitle!==PREFS.appTitle){ PREFS.appTitle=doc.appTitle; changed=true; }
+    if(fbSig(doc.children)!==fbSig(kidData.children)){ kidData.children=doc.children; changed=true; }
+    return changed;
   }
   const store=FB.known[col];
   if(type==='removed'){

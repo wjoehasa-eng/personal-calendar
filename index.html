@@ -990,7 +990,15 @@ body.tab-kids .sidebar{display:none}
       <option value="biweekly">격주</option>
       <option value="monthly">매월</option>
       <option value="yearly">매년</option>
+      <option value="lunar">매년 음력 (생신 등)</option>
     </select>
+  </div>
+  <div class="qa-dates" id="qaLunarBox" hidden>
+    <span style="font-size:12px;color:#5f6368">음력</span>
+    <input type="number" id="qaLunarM" min="1" max="12" style="width:54px">
+    <span style="font-size:12px;color:#5f6368">월</span>
+    <input type="number" id="qaLunarD" min="1" max="30" style="width:54px">
+    <span style="font-size:12px;color:#5f6368">일</span>
   </div>
   <div class="cal-picker" id="qaCalPicker" style="margin-top:8px"></div>
   <div class="qa-row">
@@ -2244,7 +2252,52 @@ function ruleTextOfRule(r){
   if(r.count&&!r.until) t+=' · '+r.count+'회';
   return t;
 }
-function ruleText(ev){ return ruleTextOfRule(evRule(ev)); }
+function ruleText(ev){
+  if(ev && ev.lunar && ev.lunarMonth && ev.lunarDay) return `매년 음력 ${ev.lunarMonth}월 ${ev.lunarDay}일`;
+  return ruleTextOfRule(evRule(ev));
+}
+const LUNAR_FMT=(typeof Intl!=='undefined'&&Intl.DateTimeFormat)?new Intl.DateTimeFormat('en-u-ca-chinese',{month:'numeric',day:'numeric'}):null;
+const LUNAR_CACHE=new Map();
+function solarToLunar(ymd){
+  if(!LUNAR_FMT) return {m:1,d:1};
+  const dt=parseYMD(ymd); if(isNaN(dt.getTime())) return {m:1,d:1};
+  const parts=LUNAR_FMT.formatToParts(new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate(),12,0,0)));
+  let m=1,d=1;
+  parts.forEach(p=>{
+    if(p.type==='month'){ const n=parseInt(String(p.value).replace(/[^0-9]/g,''),10); if(n) m=n; }
+    if(p.type==='day'){ const n=parseInt(String(p.value).replace(/[^0-9]/g,''),10); if(n) d=n; }
+  });
+  return {m:m,d:d};
+}
+function lunarToSolarInYear(year,m,d){
+  if(!LUNAR_FMT) return '';
+  const key=year+'-'+m+'-'+d;
+  if(LUNAR_CACHE.has(key)) return LUNAR_CACHE.get(key);
+  let cur=new Date(Date.UTC(year,0,1,12,0,0));
+  const end=new Date(Date.UTC(year+1,2,1,12,0,0));
+  let hit='', fallback='';
+  while(cur<=end){
+    const parts=LUNAR_FMT.formatToParts(cur);
+    let cm=0, cd=0, isLeap=false;
+    parts.forEach(p=>{
+      if(p.type==='month'){
+        const s=String(p.value);
+        if(/bis|leap/i.test(s)) isLeap=true;
+        cm=parseInt(s.replace(/[^0-9]/g,''),10)||0;
+      }
+      if(p.type==='day'){ cd=parseInt(String(p.value).replace(/[^0-9]/g,''),10)||0; }
+    });
+    if(!isLeap && cm===m && cur.getUTCFullYear()===year){
+      const ymd=cur.getUTCFullYear()+'-'+pad(cur.getUTCMonth()+1)+'-'+pad(cur.getUTCDate());
+      if(cd===d){ hit=ymd; break; }
+      if(cd<d) fallback=ymd;
+    }
+    cur.setUTCDate(cur.getUTCDate()+1);
+  }
+  const res=hit||fallback;
+  LUNAR_CACHE.set(key,res);
+  return res;
+}
 /** 시리즈의 첫 발생 날짜(YYYY-MM-DD). */
 function firstOccDate(ev){
   const b=ev&&ev.allDay?parseYMD(ev.start):parseDT(ev&&ev.start);
@@ -2267,6 +2320,19 @@ function occList(rangeStart, rangeEnd, opts){
   state.events.forEach(ev=>{
     const cal=calById(ev.calId);
     if(cal && cal.visible===false && !opts.includeHidden) return;
+    if(ev.lunar && ev.lunarMonth && ev.lunarDay){
+      const ex=evExdates(ev);
+      for(let y=rs.getFullYear()-1;y<=re.getFullYear()+1;y++){
+        const occDate=lunarToSolarInYear(y,ev.lunarMonth,ev.lunarDay);
+        if(!occDate) continue;
+        const occDay=parseYMD(occDate);
+        if(occDay<rs||occDay>re||ex.indexOf(occDate)>=0) continue;
+        const key=ev.id+'@'+occDate;
+        const o={key:key,ev:ev,cal:cal,start:occDay,end:occDay,allDay:true,occDate:occDate,span:false};
+        OCC.set(key,o); out.push(o);
+      }
+      return;
+    }
     const allDay=!!ev.allDay;
     const bStart = allDay?parseYMD(ev.start):parseDT(ev.start);
     const bEnd   = allDay?parseYMD(ev.end||ev.start):parseDT(ev.end||ev.start);
@@ -2719,6 +2785,9 @@ function openQuickAdd(o){
   $('#qaStart').value=qaState.start;
   $('#qaEnd').value=addMin(qaState.start,60);
   $('#qaRepeat').value='none';
+  const ql=solarToLunar(qaState.date);
+  $('#qaLunarM').value=ql.m; $('#qaLunarD').value=ql.d;
+  $('#qaLunarBox').hidden=true;
   $('#qaTimes').hidden=qaState.allDay;
   $('#qaTimeBtn').classList.toggle('on',!qaState.allDay);
   $('#qaAllDayBtn').classList.toggle('on',qaState.allDay);
@@ -2746,6 +2815,16 @@ function saveQuickAdd(){
     ev={allDay:false,start:sd+'T'+st,end:ed+'T'+en};
   }
   const rep=$('#qaRepeat').value||'none';
+  if(rep==='lunar'){
+    const lm=Math.max(1,Math.min(12,parseInt($('#qaLunarM').value,10)||1));
+    const ld=Math.max(1,Math.min(30,parseInt($('#qaLunarD').value,10)||1));
+    const sol=lunarToSolarInYear(parseYMD(sd).getFullYear(),lm,ld)||sd;
+    const full={id:uid(),title:title,calId:qaState.calId,allDay:true,start:sol,end:sol,repeat:'yearly',rrule:'',lunar:true,lunarMonth:lm,lunarDay:ld,exdates:[],location:'',memo:'',color:'',done:false,googleId:'',googleSentAt:'',updatedAt:new Date().toISOString()};
+    upsertEvent(full);
+    closeQuickAdd();
+    toast(`매년 음력 ${lm}월 ${ld}일 일정을 추가했어요`);
+    return;
+  }
   let repeat='none', rrule='';
   if(rep!=='none'){
     const map={daily:'DAILY',weekly:'WEEKLY',biweekly:'WEEKLY',monthly:'MONTHLY',yearly:'YEARLY'};
@@ -2779,6 +2858,24 @@ function timeText(o){
   }
   if(sameDay(o.start,o.end)) return `${dateShort(o.start)} · ${fmtTime(o.start)} – ${fmtTime(o.end)}`;
   return `${dateShort(o.start)} ${fmtTime(o.start)} – ${dateShort(o.end)} ${fmtTime(o.end)}`;
+}
+function openKidPop(id,date,x,y){
+  const ev=kidEvents().find(function(k){ return k.id===id; }); if(!ev) return;
+  currentPop='kid:'+id+'@'+(date||ev.date||''); popXY={x:x,y:y};
+  $('#popDot').style.background=kColorOf(ev);
+  $('#popTitle').textContent=ev.title||'(제목 없음)';
+  $('#popTitle').classList.remove('done');
+  const d=date||ev.date||'';
+  const ttxt=ev.allDay ? ((d?dateShort(parseYMD(d)):'')+' · 종일') : ((d?dateShort(parseYMD(d))+' · ':'')+(ev.start||'')+(ev.end?' – '+ev.end:''));
+  const kids=(ev.childIds||[]).map(function(cid){ const c=kChild(cid); return c?c.name:''; }).filter(Boolean).join(', ');
+  let body='';
+  body+=line(ICO.clock,esc(ttxt));
+  if(kids) body+=line(ICO.cal,esc(kids),'육아 시간표');
+  if(ev.place) body+=line(ICO.pin,esc(ev.place));
+  if(ev.memo) body+=line(ICO.note,esc(ev.memo));
+  $('#popBody').innerHTML=body;
+  $('#pop').hidden=false;
+  positionPop(x,y);
 }
 function openPop(key,x,y){
   const o=OCC.get(key); if(!o) return;
@@ -2908,8 +3005,8 @@ function mRepReadPanel(){
 }
 function mRepSync(){
   const v=$('#mRepeat').value;
-  $('#mRepPanel').hidden=(v==='none');
-  if(v==='none') return;
+  $('#mRepPanel').hidden=(v==='none'||v==='lunar');
+  if(v==='none'||v==='lunar') return;
   const r=mRepReadPanel();
   $('#mDowWrap').hidden=(r.freq!=='WEEKLY');
   $('#mRepUnit').textContent=RR_UNIT[r.freq]+'마다';
@@ -3002,9 +3099,21 @@ function openModal(opts){
   $('#mStartDate').value=YMD(s); $('#mStartTime').value=HM(s);
   $('#mEndDate').value=YMD(e); $('#mEndTime').value=HM(e);
   const rule=evRule(ev);
-  $('#mRepeat').value=mRepPresetOf(rule);
-  mRepFillPanel(rule);
-  mRepSync();
+  if(ev.lunar&&ev.lunarMonth&&ev.lunarDay){
+    $('#mRepeat').value='lunar';
+    $('#mLunarM').value=ev.lunarMonth;
+    $('#mLunarD').value=ev.lunarDay;
+    $('#mLunarPanel').hidden=false;
+    mRepFillPanel(rule);
+    $('#mRepPanel').hidden=true;
+  } else {
+    $('#mLunarPanel').hidden=true;
+    const l=solarToLunar(YMD(s));
+    $('#mLunarM').value=l.m; $('#mLunarD').value=l.d;
+    $('#mRepeat').value=mRepPresetOf(rule);
+    mRepFillPanel(rule);
+    mRepSync();
+  }
   $('#mLocation').value=ev.location||'';
   $('#mMemo').value=ev.memo||'';
   renderCalPicker(ev.calId);
@@ -3024,8 +3133,14 @@ function collectForm(){
   ev.title=$('#mTitle').value.trim()||'(제목 없음)';
   ev.allDay=$('#mAllDay').checked;
   const repV=$('#mRepeat').value;
-  if(repV==='none'){ ev.repeat='none'; ev.rrule=''; }
+  if(repV==='lunar'){
+    ev.lunar=true;
+    ev.lunarMonth=Math.max(1,Math.min(12,parseInt($('#mLunarM').value,10)||1));
+    ev.lunarDay=Math.max(1,Math.min(30,parseInt($('#mLunarD').value,10)||1));
+    ev.allDay=true; ev.repeat='yearly'; ev.rrule='';
+  } else if(repV==='none'){ ev.lunar=false; ev.lunarMonth=0; ev.lunarDay=0; ev.repeat='none'; ev.rrule=''; }
   else {
+    ev.lunar=false; ev.lunarMonth=0; ev.lunarDay=0;
     const r=mRepReadPanel();
     ev.rrule=rruleBuild(r);
     ev.repeat=(r.freq==='DAILY'?'daily':r.freq==='WEEKLY'?'weekly':r.freq==='MONTHLY'?'monthly':'yearly');
@@ -3039,7 +3154,10 @@ function collectForm(){
   const sd=$('#mStartDate').value||YMD(TODAY);
   let ed=$('#mEndDate').value||sd;
   if(ed<sd) ed=sd;
-  if(ev.allDay){ ev.start=sd; ev.end=ed; }
+  if(ev.lunar&&ev.lunarMonth&&ev.lunarDay){
+    const sol=lunarToSolarInYear(parseYMD(sd).getFullYear(),ev.lunarMonth,ev.lunarDay)||sd;
+    ev.start=sol; ev.end=sol;
+  } else if(ev.allDay){ ev.start=sd; ev.end=ed; }
   else {
     const st=$('#mStartTime').value||'09:00';
     let en=$('#mEndTime').value||'10:00';
@@ -4499,9 +4617,18 @@ function bindKids(){
     const add=e.target.closest('[data-kadd]');
     if(add){ openKidModal(null,add.dataset.kadd); return; }
     const kev=e.target.closest('[data-kev]');
-    if(kev){ openKidModal(kev.dataset.kev,kev.dataset.kdate||null); return; }
+    if(kev){
+      if(state.view==='kid-week'){ openKidPop(kev.dataset.kev,kev.dataset.kdate||null,e.clientX,e.clientY); return; }
+      openKidModal(kev.dataset.kev,kev.dataset.kdate||null); return;
+    }
     const pkev=e.target.closest('[data-pkev]');
-    if(pkev){ const ev=state.events.find(function(x){ return x.id===pkev.dataset.pkev; }); if(ev) openModal({ev:ev,occDate:pkev.dataset.pkdate||null}); return; }
+    if(pkev){
+      const key=pkev.dataset.pkev+'@'+(pkev.dataset.pkdate||'');
+      if(OCC.has(key)){ openPop(key,e.clientX,e.clientY); return; }
+      const ev=state.events.find(function(x){ return x.id===pkev.dataset.pkev; });
+      if(ev) openModal({event:ev,occDate:pkev.dataset.pkdate||null});
+      return;
+    }
     const sup=e.target.closest('[data-ksup]');
     if(sup){ kToggleSup(sup.dataset.ksup,sup.dataset.ksdate,sup.dataset.ksid); return; }
     const wk=e.target.closest('[data-kweek]');
@@ -4614,6 +4741,15 @@ function bind(){
     if(!qaState) return;
     qaState.allDay=true; $('#qaTimes').hidden=true; $('#qaAllDayBtn').classList.add('on'); $('#qaTimeBtn').classList.remove('on');
   });
+  $('#qaRepeat').addEventListener('change',()=>{
+    const isL=$('#qaRepeat').value==='lunar';
+    $('#qaLunarBox').hidden=!isL;
+    if(isL){
+      const l=solarToLunar($('#qaDate').value||YMD(TODAY));
+      if(!$('#qaLunarM').value) $('#qaLunarM').value=l.m;
+      if(!$('#qaLunarD').value) $('#qaLunarD').value=l.d;
+    }
+  });
   $('#qaDate').addEventListener('change',()=>{
     const sd=$('#qaDate').value;
     if(sd && (!$('#qaEndDate').value || $('#qaEndDate').value<sd)) $('#qaEndDate').value=sd;
@@ -4635,8 +4771,22 @@ function bind(){
   });
 
   $('#popClose').addEventListener('click',closePop);
-  $('#popEdit').addEventListener('click',()=>{ const o=OCC.get(currentPop); if(o) openModal({event:o.ev, occDate:o.occDate}); });
-  $('#popDel').addEventListener('click',()=>{ const o=OCC.get(currentPop); if(o) deleteEvent(o.ev, o.occDate); });
+  $('#popEdit').addEventListener('click',()=>{
+    if(currentPop&&currentPop.startsWith('kid:')){
+      const rest=currentPop.slice(4), at=rest.indexOf('@');
+      const id=at>=0?rest.slice(0,at):rest, dt=at>=0?rest.slice(at+1):null;
+      closePop(); openKidModal(id,dt||null); return;
+    }
+    const o=OCC.get(currentPop); if(o) openModal({event:o.ev, occDate:o.occDate});
+  });
+  $('#popDel').addEventListener('click',()=>{
+    if(currentPop&&currentPop.startsWith('kid:')){
+      const rest=currentPop.slice(4), at=rest.indexOf('@');
+      const id=at>=0?rest.slice(0,at):rest, dt=at>=0?rest.slice(at+1):null;
+      closePop(); openKidModal(id,dt||null); return;
+    }
+    const o=OCC.get(currentPop); if(o) deleteEvent(o.ev, o.occDate);
+  });
 
   $('#mClose').addEventListener('click',closeModal);
   $('#qaClose').addEventListener('click',closeQuickAdd);
@@ -4656,6 +4806,15 @@ function bind(){
   ['mStartDate','mStartTime','mEndDate','mEndTime'].forEach(id=>$('#'+id).addEventListener('change',updateDur));
   $('#mRepeat').addEventListener('change',()=>{
     const v=$('#mRepeat').value;
+    $('#mLunarPanel').hidden=(v!=='lunar');
+    if(v==='lunar'){
+      $('#mAllDay').checked=true; syncAllDay();
+      $('#mRepPanel').hidden=true;
+      const l=solarToLunar($('#mStartDate').value||YMD(TODAY));
+      if(!$('#mLunarM').value) $('#mLunarM').value=l.m;
+      if(!$('#mLunarD').value) $('#mLunarD').value=l.d;
+      return;
+    }
     if(v==='none'){ mRepSync(); return; }
     if(v!=='custom'){
       const cur=mRepReadPanel();
@@ -5221,8 +5380,9 @@ function fbEvToDoc(ev){
     allDay:!!ev.allDay, repeat:fbStr(ev.repeat||'none')||'none', rrule:fbStr(ev.rrule),
     exdates:(Array.isArray(ev.exdates)?ev.exdates:[]).map(fbStr).filter(Boolean),
     calId:fbStr(ev.calId), location:fbStr(ev.location), memo:fbStr(ev.memo),
-    color:fbStr(ev.color), done:!!ev.done, googleId:fbStr(ev.googleId),
-    googleSentAt:fbStr(ev.googleSentAt), updatedAt:fbStr(ev.updatedAt)
+    color:fbStr(ev.color), done:!!ev.done, lunar:!!ev.lunar,
+    lunarMonth:Number(ev.lunarMonth)||0, lunarDay:Number(ev.lunarDay)||0,
+    googleId:fbStr(ev.googleId), googleSentAt:fbStr(ev.googleSentAt), updatedAt:fbStr(ev.updatedAt)
   };
 }
 function fbEvFromDoc(d,id){
@@ -5230,8 +5390,8 @@ function fbEvFromDoc(d,id){
   const ev=fbEvToDoc({
     id:fbStr(d.id||id), title:d.title, start:d.start, end:d.end, allDay:d.allDay,
     repeat:d.repeat, rrule:d.rrule, exdates:d.exdates, calId:d.calId, location:d.location,
-    memo:d.memo, color:d.color, done:d.done, googleId:d.googleId,
-    googleSentAt:d.googleSentAt, updatedAt:d.updatedAt
+    memo:d.memo, color:d.color, done:d.done, lunar:d.lunar, lunarMonth:d.lunarMonth, lunarDay:d.lunarDay,
+    googleId:d.googleId, googleSentAt:d.googleSentAt, updatedAt:d.updatedAt
   });
   if(ev.allDay){ ev.start=fbStr(d.start).slice(0,10); ev.end=fbStr(d.end||d.start).slice(0,10); }
   return ev;

@@ -2867,15 +2867,16 @@ function openKidPop(id,date,x,y){
   $('#popTitle').classList.remove('done');
   const d=date||ev.date||'';
   const ttxt=ev.allDay ? ((d?dateShort(parseYMD(d)):'')+' · 종일') : ((d?dateShort(parseYMD(d))+' · ':'')+(ev.start||'')+(ev.end?' – '+ev.end:''));
-  const kids=(ev.childIds||[]).map(function(cid){ const c=kChild(cid); return c?c.name:''; }).filter(Boolean).join(', ');
+  const kids=(ev.childIds||[]).map(function(cid){ const c=(kidData.children||[]).find(function(x){ return x.id===cid; }); return c?c.name:''; }).filter(Boolean).join(', ');
   let body='';
   body+=line(ICO.clock,esc(ttxt));
   if(kids) body+=line(ICO.cal,esc(kids),'육아 시간표');
   if(ev.place) body+=line(ICO.pin,esc(ev.place));
   if(ev.memo) body+=line(ICO.note,esc(ev.memo));
   $('#popBody').innerHTML=body;
+  $('#popFoot').innerHTML='';
   $('#pop').hidden=false;
-  positionPop(x,y);
+  positionAt($('#pop'),x+10,y+10);
 }
 function openPop(key,x,y){
   const o=OCC.get(key); if(!o) return;

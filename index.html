@@ -360,7 +360,11 @@ input[type=date],input[type=time]{font-family:inherit}
   position:fixed;z-index:150;width:320px;background:#fff;border-radius:8px;box-shadow:var(--shadow-3);
   padding:14px 14px 10px;font-size:13px;
 }
-.qa input#qaTitle{border:0;border-bottom:2px solid var(--line2);outline:0;width:100%;font-size:15px;padding:4px 2px 8px;transition:border-color .15s}
+.qa-top{display:flex;align-items:center;gap:6px}
+.qa input#qaTitle{border:0;border-bottom:2px solid var(--line2);outline:0;flex:1 1 auto;min-width:0;font-size:15px;padding:4px 2px 8px;transition:border-color .15s}
+.qa .qa-close{flex:0 0 auto;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#5f6368;background:transparent}
+.qa .qa-close:hover{background:var(--hover)}
+.qa .qa-close svg{width:18px;height:18px;fill:currentColor}
 .qa input#qaTitle:focus{border-bottom-color:var(--blue)}
 .qa-row{display:flex;align-items:center;gap:6px;margin-top:10px}
 .qa-chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:6px;border:1px solid var(--line2);font-size:12px;color:#3c4043;background:#fff}
@@ -914,7 +918,10 @@ body.tab-kids .sidebar{display:none}
 
 <!-- 빠른 등록 -->
 <div class="qa" id="qa" hidden role="dialog" aria-label="빠른 등록">
-  <input id="qaTitle" placeholder="제목 추가" autocomplete="off">
+  <div class="qa-top">
+    <input id="qaTitle" placeholder="제목 추가" autocomplete="off">
+    <button type="button" class="qa-close" id="qaClose" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+  </div>
   <div class="qa-row">
     <button class="qa-chip" id="qaTimeBtn">🕘 시간</button>
     <button class="qa-chip" id="qaAllDayBtn">종일</button>
@@ -2562,7 +2569,8 @@ function closeMenus(){ const m=$('#viewMenu'); if(m) m.remove(); }
 function openQuickAdd(o){
   closePop(); closeMenus();
   const calId=o.calId||firstCalId();
-  qaState={date:o.date||YMD(state.cursor), start:o.start||'09:00', allDay:!!o.allDay, calId:calId};
+  const isAllDay=(o.allDay!==undefined)?!!o.allDay:true;
+  qaState={date:o.date||YMD(state.cursor), start:o.start||'09:00', allDay:isAllDay, calId:calId};
   $('#qaTitle').value='';
   $('#qaDate').value=qaState.date;
   $('#qaStart').value=qaState.start;
@@ -2817,8 +2825,9 @@ function openModal(opts){
     const date=opts.date||YMD(state.cursor);
     const st=opts.start||'09:00';
     let en=opts.end||addMin(st,60);
-    ev={id:'',title:'',start:date+'T'+st,end:date+'T'+en,allDay:!!opts.allDay,repeat:'none',calId:opts.calId||firstCalId(),location:'',memo:'',color:'',done:false,googleId:'',googleSentAt:''};
-    if(opts.allDay){ ev.start=date; ev.end=date; }
+    const isAllDay=(opts.allDay!==undefined)?!!opts.allDay:true;
+    ev={id:'',title:'',start:date+'T'+st,end:date+'T'+en,allDay:isAllDay,repeat:'none',calId:opts.calId||firstCalId(),location:'',memo:'',color:'',done:false,googleId:'',googleSentAt:''};
+    if(isAllDay){ ev.start=date; ev.end=date; }
   }
   /* 반복 일정의 특정 회차를 열면 그 날짜·시간으로 보여 줍니다. */
   let occDate=opts.occDate||'';
@@ -3179,9 +3188,9 @@ function bindTimeGrid(){
       document.removeEventListener('pointerup',up);
       if(box){ box.hidden=true; box.innerHTML=''; }
       if(moved){
-        openModal({date:col.dataset.day,start:minLabel(startMin),end:minLabel(Math.min(1425,endMin))});
+        openModal({date:col.dataset.day,start:minLabel(startMin),end:minLabel(Math.min(1425,endMin)),allDay:false});
       } else {
-        openQuickAdd({date:col.dataset.day,start:minLabel(startMin),x:ev.clientX,y:ev.clientY});
+        openQuickAdd({date:col.dataset.day,start:minLabel(startMin),allDay:false,x:ev.clientX,y:ev.clientY});
       }
     };
     document.addEventListener('pointermove',move);
@@ -4452,6 +4461,7 @@ function bind(){
   $('#popDel').addEventListener('click',()=>{ const o=OCC.get(currentPop); if(o) deleteEvent(o.ev, o.occDate); });
 
   $('#mClose').addEventListener('click',closeModal);
+  $('#qaClose').addEventListener('click',closeQuickAdd);
   $('#mCancel').addEventListener('click',closeModal);
   $('#mSave').addEventListener('click',saveModal);
   $('#mDelete').addEventListener('click',()=>{ if(editing) deleteEvent(editing.ev, editing.occDate); });

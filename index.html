@@ -472,10 +472,11 @@ input[type=date],input[type=time]{font-family:inherit}
 .gstatus{display:flex;align-items:center;gap:8px;margin:8px 0 4px;font-size:12px;color:var(--muted);min-height:20px}
 .gstatus .badge{font-size:11px;padding:2px 8px}
 
-/* 확인 대화상자 */
-#confirm .modal-card{max-width:400px}
-#confirm .cb-body{padding:4px 24px 12px;font-size:13.5px;line-height:1.6;color:#3c4043;white-space:pre-wrap}
-#confirm .cb-title{font-size:17px;font-weight:500;padding:6px 24px 2px}
+/* 확인 대화상자 · 반복 범위 선택 */
+#confirm .modal-card,#scope .modal-card{max-width:420px}
+#scope{z-index:200}
+#confirm .cb-body,#scope .cb-body{padding:6px 24px 16px;font-size:13.5px;line-height:1.6;color:#3c4043;white-space:pre-wrap}
+#confirm .cb-title,#scope .cb-title{font-size:17px;font-weight:600;padding:18px 24px 6px}
 
 /* 토스트 */
 #toast{

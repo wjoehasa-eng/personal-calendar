@@ -966,10 +966,10 @@ body.tab-kids .sidebar{display:none}
   <div class="qa-row">
     <button class="qa-chip" id="qaTimeBtn">🕘 시간</button>
     <button class="qa-chip" id="qaAllDayBtn">종일</button>
-    <button class="qa-chip" id="qaCalBtn"><i class="dot" style="background:#039be5"></i><span id="qaCalName">개인</span></button>
     <span class="spacer"></span>
     <button class="btn primary sm" id="qaSave">저장</button>
   </div>
+  <div class="cal-picker" id="qaCalPicker" style="margin-top:8px"></div>
   <div class="qa-times" id="qaTimes" hidden>
     <input type="date" id="qaDate">
     <input type="time" id="qaStart">
@@ -2660,11 +2660,12 @@ function openQuickAdd(o){
   $('#qaTimes').hidden=qaState.allDay;
   $('#qaTimeBtn').classList.toggle('on',!qaState.allDay);
   $('#qaAllDayBtn').classList.toggle('on',qaState.allDay);
-  const c=calById(calId)||{name:'캘린더',color:'#039be5'};
-  $('#qaCalName').textContent=c.name;
-  $('#qaCalBtn').querySelector('.dot').style.background=c.color;
+  renderQaCalPicker(calId);
   positionAt($('#qa'), o.x==null?(innerWidth/2-160):o.x, o.y==null?120:o.y);
   setTimeout(()=>{ $('#qaTitle').focus(); },10);
+}
+function renderQaCalPicker(sel){
+  $('#qaCalPicker').innerHTML=state.cals.map(c=>`<button type="button" class="cal-pick ${c.id===sel?'on':''}" data-qacal="${c.id}"><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</button>`).join('');
 }
 function closeQuickAdd(){ hide($('#qa')); qaState=null; }
 function saveQuickAdd(){
@@ -4538,13 +4539,10 @@ function bind(){
     if(!qaState) return;
     qaState.allDay=true; $('#qaTimes').hidden=true; $('#qaAllDayBtn').classList.add('on'); $('#qaTimeBtn').classList.remove('on');
   });
-  $('#qaCalBtn').addEventListener('click',()=>{
-    if(!qaState) return;
-    const i=state.cals.findIndex(c=>c.id===qaState.calId);
-    const n=state.cals[(i+1)%state.cals.length]; if(!n) return;
-    qaState.calId=n.id;
-    $('#qaCalName').textContent=n.name;
-    $('#qaCalBtn').querySelector('.dot').style.background=n.color;
+  $('#qaCalPicker').addEventListener('click',e=>{
+    const b=e.target.closest('[data-qacal]'); if(!b||!qaState) return;
+    qaState.calId=b.dataset.qacal;
+    renderQaCalPicker(qaState.calId);
   });
 
   $('#popClose').addEventListener('click',closePop);

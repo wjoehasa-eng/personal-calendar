@@ -5220,7 +5220,7 @@ function fbApplyDoc(col,id,type,data){
   if(type!=='removed' && (!data||typeof data!=='object')) return false;
   if(col==='profile'){
     if(type==='removed'){ FB.known.profile=null; return false; }
-    const doc=fbKidsProfileDocFromDoc(data);
+    const doc=fbKidsProfileFromDoc(data);
     FB.known.profile=doc;
     if(fbSig(doc.children)===fbSig(kidData.children)) return false;
     kidData.children=doc.children;

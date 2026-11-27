@@ -5747,7 +5747,7 @@ function fbApplyDoc(col,id,type,data){
 function fbFirstCheck(){
   if(!FB.user) return;
   fbRender();
-  if(!FB.got.events || !FB.serverSeen){
+  if(!FB.got.events || !FB.got.cals || !FB.got.kids || !FB.serverSeen){
     /* 오프라인 캐시만으로 떠 있을 때는 서버 확인 뒤에 병합합니다 —
        캐시가 오래된 채로 클라우드를 덮어쓰지 않도록. */
     if(FB.tries++<40) setTimeout(fbFirstCheck,500);

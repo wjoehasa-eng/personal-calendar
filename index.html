@@ -1490,8 +1490,13 @@ const EV_PALETTE = [
 ];
 const DONE_COLOR = '#3f4042';
 /* 일정 색: 일정에 고른 색 > 캘린더 색. 완료한 일정은 항상 흑색으로 보입니다. */
-function evColor(ev, cal){
-  if(ev && ev.done) return DONE_COLOR;
+function isEvDone(ev, occDate){
+  if(!ev) return false;
+  if(evIsRepeating(ev) && occDate && Array.isArray(ev.doneDates)) return ev.doneDates.indexOf(occDate)>=0;
+  return !!ev.done;
+}
+function evColor(ev, cal, occDate){
+  if(isEvDone(ev, occDate)) return DONE_COLOR;
   return (ev && ev.color) || (cal && cal.color) || '#039be5';
 }
 const PREFS = {weekStart:0, appTitle:'내 캘린더'};
@@ -2538,18 +2543,18 @@ function renderMini(){
 
 /* ------------------------------------------------------------ 월간 렌더 */
 function chipHTML(s){
-  const o=s.o, ev=o.ev, color=evColor(ev,o.cal), fg=contrast(color);
+  const o=s.o, ev=o.ev, done=isEvDone(ev,o.occDate), color=evColor(ev,o.cal,o.occDate), fg=contrast(color);
   const cls=['chip', o.allDay?'allday':'timed'];
   if(s.contL) cls.push('cont-l');
   if(s.contR) cls.push('cont-r');
   if(ev.googleId) cls.push('sent');
-  if(ev.done) cls.push('done');
+  if(done) cls.push('done');
   const style=`--c:${s.c0};--s:${s.c1-s.c0+1};--lane:${s.lane};--color:${color};--fg:${fg}`;
-  const chk=ev.done?'<span class="chk" aria-hidden="true">✓</span>':'';
+  const chk=done?'<span class="chk" aria-hidden="true">✓</span>':'';
   const inner = o.allDay
     ? `${chk}<span class="ti">${esc(ev.title||'(제목 없음)')}</span>`
     : `<i class="dot" style="background:${color}"></i>${chk}<span class="t">${fmtTime(o.start)}</span><span class="ti">${esc(ev.title||'(제목 없음)')}</span>`;
-  return `<div class="${cls.join(' ')}" style="${style}" data-key="${o.key}" title="${ev.done?'✓ 완료 · ':''}${esc(ev.title)}${ev.location?' · '+esc(ev.location):''}">${inner}</div>`;
+  return `<div class="${cls.join(' ')}" style="${style}" data-key="${o.key}" title="${done?'✓ 완료 · ':''}${esc(ev.title)}${ev.location?' · '+esc(ev.location):''}">${inner}</div>`;
 }
 
 function renderMonth(){
@@ -2662,9 +2667,9 @@ function renderTime(){
       const items=allDay.filter(o=>startOfDay(o.start)<=d && startOfDay(o.end)>=d);
       h+=`<div class="ad-cell" data-date="${YMD(d)}">`+items.map(o=>{
         const contL=startOfDay(o.start)<d, contR=startOfDay(o.end)>d;
-        const color=evColor(o.ev,o.cal);
+        const done=isEvDone(o.ev,o.occDate), color=evColor(o.ev,o.cal,o.occDate);
         OCC.set(o.key,o);
-        return `<div class="ad-chip${contL?' cont-l':''}${contR?' cont-r':''}${o.ev.done?' done':''}" style="--color:${color};--fg:${contrast(color)}" data-key="${o.key}" title="${esc(o.ev.title)}">${o.ev.done?'✓ ':''}${esc(o.ev.title||'(제목 없음)')}</div>`;
+        return `<div class="ad-chip${contL?' cont-l':''}${contR?' cont-r':''}${done?' done':''}" style="--color:${color};--fg:${contrast(color)}" data-key="${o.key}" title="${esc(o.ev.title)}">${done?'✓ ':''}${esc(o.ev.title||'(제목 없음)')}</div>`;
       }).join('')+'</div>';
     });
     $('#tvAllDay').innerHTML=h;
@@ -2703,10 +2708,10 @@ function renderTime(){
     });
     layoutCols(list);
     list.forEach(it=>{
-      const o=it.o, ev=o.ev, color=evColor(ev,o.cal);
+      const o=it.o, ev=o.ev, done=isEvDone(ev,o.occDate), color=evColor(ev,o.cal,o.occDate);
       OCC.set(o.key,o);
       const el=document.createElement('div');
-      el.className='tev'+(it.endMin-it.startMin<30?' compact':'')+(ev.done?' done':'');
+      el.className='tev'+(it.endMin-it.startMin<30?' compact':'')+(done?' done':'');
       el.dataset.key=o.key;
       el.style.setProperty('--col',String(it.col));
       el.style.setProperty('--cols',String(it.cols||1));
@@ -2717,7 +2722,7 @@ function renderTime(){
       el.style.top=(it.startMin/1440*100)+'%';
       el.style.height=Math.max(16,(it.endMin-it.startMin)*0.8)+'px';
       el.title=esc(ev.title)+(ev.location?' · '+esc(ev.location):'');
-      el.innerHTML=`<div class="tt">${ev.done?'✓ ':''}${esc(ev.title||'(제목 없음)')}</div><div class="tm">${fmtTime(o.start)} – ${fmtTime(o.end)}</div>`;
+      el.innerHTML=`<div class="tt">${done?'✓ ':''}${esc(ev.title||'(제목 없음)')}</div><div class="tm">${fmtTime(o.start)} – ${fmtTime(o.end)}</div>`;
       col.appendChild(el);
     });
   });
@@ -2757,11 +2762,11 @@ function renderSchedule(){
       const hol=HOLIDAYS[k];
       html+=`<div class="sch-day"><div class="sch-date${today?' today':''}"><div class="d1">${d.getMonth()+1}월 ${d.getDate()}일 (${WD[d.getDay()]})</div><div class="d2">${today?'오늘':d.getFullYear()+'년'}${hol?' · '+esc(hol):''}</div></div><div class="sch-items">`;
     }
-    const color=evColor(o.ev,o.cal);
+    const done=isEvDone(o.ev,o.occDate), color=evColor(o.ev,o.cal,o.occDate);
     const time=o.allDay?'종일':fmtTime(o.start);
     const meta=[o.ev.location, (o.cal&&o.cal.name)||''].filter(Boolean).join(' · ');
-    const badges=(o.ev.done?'<span class="badge done">✓ 완료</span>':'')+(evIsRepeating(o.ev)?`<span class="badge">🔁 ${esc(ruleText(o.ev))}</span>`:'')+(o.ev.googleId?'<span class="badge g">✓ 구글 전송됨</span>':'');
-    html+=`<div class="sch-item${o.ev.done?' done':''}" data-key="${o.key}"><i class="dot" style="--color:${color};background:${color}"></i><div class="si-time">${time}</div><div class="si-main"><div class="si-t">${esc(o.ev.title||'(제목 없음)')}${badges}</div>${meta?`<div class="si-m">${esc(meta)}</div>`:''}</div></div>`;
+    const badges=(done?'<span class="badge done">✓ 완료</span>':'')+(evIsRepeating(o.ev)?`<span class="badge">🔁 ${esc(ruleText(o.ev))}</span>`:'')+(o.ev.googleId?'<span class="badge g">✓ 구글 전송됨</span>':'');
+    html+=`<div class="sch-item${done?' done':''}" data-key="${o.key}"><i class="dot" style="--color:${color};background:${color}"></i><div class="si-time">${time}</div><div class="si-main"><div class="si-t">${esc(o.ev.title||'(제목 없음)')}${badges}</div>${meta?`<div class="si-m">${esc(meta)}</div>`:''}</div></div>`;
     const next=occs[occs.indexOf(o)+1];
     if(!next || YMD(next.start)!==k) html+='</div></div>';
   });
@@ -2907,13 +2912,19 @@ function timeText(o){
   if(sameDay(o.start,o.end)) return `${dateShort(o.start)} · ${fmtTime(o.start)} – ${fmtTime(o.end)}`;
   return `${dateShort(o.start)} ${fmtTime(o.start)} – ${dateShort(o.end)} ${fmtTime(o.end)}`;
 }
+function kIsDone(ev,occDate){
+  if(!ev) return false;
+  if(ev.rrule && occDate && Array.isArray(ev.doneDates)) return ev.doneDates.indexOf(occDate)>=0;
+  return !!ev.done;
+}
 function openKidPop(id,date,x,y){
   const ev=kidData.events.find(function(k){ return k.id===id; }); if(!ev) return;
-  currentPop='kid:'+id+'@'+(date||ev.date||''); popXY={x:x,y:y};
-  $('#popDot').style.background=ev.done?'#1e293b':kColorOf(ev);
-  $('#popTitle').textContent=ev.title||'(제목 없음)';
-  $('#popTitle').classList.toggle('done',!!ev.done);
   const d=date||ev.date||'';
+  const done=kIsDone(ev,d);
+  currentPop='kid:'+id+'@'+d; popXY={x:x,y:y};
+  $('#popDot').style.background=done?'#1e293b':kColorOf(ev);
+  $('#popTitle').textContent=ev.title||'(제목 없음)';
+  $('#popTitle').classList.toggle('done',done);
   const ttxt=ev.allDay ? ((d?dateShort(parseYMD(d)):'')+' · 종일') : ((d?dateShort(parseYMD(d))+' · ':'')+(ev.start||'')+(ev.end?' – '+ev.end:''));
   const kids=(ev.childIds||[]).map(function(cid){ const c=(kidData.children||[]).find(function(x){ return x.id===cid; }); return c?c.name:''; }).filter(Boolean).join(', ');
   let body='';
@@ -2922,7 +2933,7 @@ function openKidPop(id,date,x,y){
   if(ev.place) body+=line(ICO.pin,esc(ev.place));
   if(ev.memo) body+=line(ICO.note,esc(ev.memo));
   $('#popBody').innerHTML=body;
-  $('#popFoot').innerHTML='<button class="btn text sm" id="popKidDone">'+(ev.done?'완료 해제':'✓ 완료')+'</button>';
+  $('#popFoot').innerHTML='<button class="btn text sm" id="popKidDone">'+(done?'완료 해제':'✓ 완료')+'</button>';
   $('#pop').hidden=false;
   positionAt($('#pop'),x+10,y+10);
   const kd=$('#popKidDone');
@@ -2930,7 +2941,14 @@ function openKidPop(id,date,x,y){
 }
 function kToggleDone(id,date,x,y){
   const ev=kidData.events.find(function(k){ return k.id===id; }); if(!ev) return;
-  ev.done=!ev.done;
+  if(ev.rrule && date){
+    ev.doneDates=Array.isArray(ev.doneDates)?ev.doneDates.slice():[];
+    const idx=ev.doneDates.indexOf(date);
+    if(idx>=0) ev.doneDates.splice(idx,1); else ev.doneDates.push(date);
+    ev.done=false;
+  } else {
+    ev.done=!ev.done;
+  }
   ev.updatedAt=new Date().toISOString();
   kSaveLocal(); kQueue(ev); renderAll();
   openKidPop(id,date,x!=null?x:innerWidth/2,y!=null?y:120);
@@ -2938,20 +2956,20 @@ function kToggleDone(id,date,x,y){
 function openPop(key,x,y){
   const o=OCC.get(key); if(!o) return;
   currentPop=key; popXY={x:x,y:y};
-  const ev=o.ev, cal=o.cal||{name:'캘린더',color:'#039be5'};
-  $('#popDot').style.background=evColor(ev,cal);
+  const ev=o.ev, cal=o.cal||{name:'캘린더',color:'#039be5'}, done=isEvDone(ev,o.occDate);
+  $('#popDot').style.background=evColor(ev,cal,o.occDate);
   $('#popTitle').textContent=ev.title||'(제목 없음)';
-  $('#popTitle').classList.toggle('done',!!ev.done);
+  $('#popTitle').classList.toggle('done',done);
   let body='';
   body+=line(ICO.clock,esc(timeText(o)));
-  if(ev.done) body+=line('✓','완료한 일정','흑색으로 표시');
+  if(done) body+=line('✓','완료한 일정','흑색으로 표시');
   const rtxt=ruleText(ev);
   if(rtxt) body+=line(ICO.repeat,esc(rtxt),'반복 일정');
   body+=line(ICO.cal,esc(cal.name),'캘린더');
   if(ev.location) body+=line(ICO.pin,esc(ev.location));
   if(ev.memo) body+=line(ICO.note,esc(ev.memo));
   $('#popBody').innerHTML=body;
-  const doneBtn=`<button class="btn donebtn${ev.done?' on':''}" id="popDone">${ev.done?'↺ 완료 취소':'✓ 완료'}</button>`;
+  const doneBtn=`<button class="btn donebtn${done?' on':''}" id="popDone">${done?'↺ 완료 취소':'✓ 완료'}</button>`;
   $('#popFoot').innerHTML=doneBtn+(ev.googleId
     ? '<span class="badge g">✓ 구글 전송됨</span><span class="hint" style="margin-left:6px">이미 보낸 일정이에요</span>'
     : '<button class="btn gbtn" id="popSend">📤 구글 캘린더로 보내기</button>');
@@ -2959,17 +2977,27 @@ function openPop(key,x,y){
   const b=$('#popSend');
   if(b) b.addEventListener('click',()=>{ const cur=OCC.get(currentPop); if(cur) sendToGoogle(cur.ev,b); });
   const d=$('#popDone');
-  if(d) d.addEventListener('click',()=>{ const cur=OCC.get(currentPop); if(cur) toggleDone(cur.ev); });
+  if(d) d.addEventListener('click',()=>{ const cur=OCC.get(currentPop); if(cur) toggleDone(cur.ev,cur.occDate); });
 }
 /* 완료 토글 — 흑색 체크리스트로 바꿨다가 다시 풀 수 있습니다 */
-function toggleDone(ev){
+function toggleDone(ev,occDate){
   const t=state.events.find(x=>x.id===ev.id); if(!t) return;
   const key=currentPop, xy=popXY?{x:popXY.x,y:popXY.y}:null;
-  t.done=!t.done;
+  let nowDone=false;
+  if(evIsRepeating(t) && occDate){
+    t.doneDates=Array.isArray(t.doneDates)?t.doneDates.slice():[];
+    const idx=t.doneDates.indexOf(occDate);
+    if(idx>=0){ t.doneDates.splice(idx,1); nowDone=false; }
+    else { t.doneDates.push(occDate); nowDone=true; }
+    t.done=false;
+  } else {
+    t.done=!t.done;
+    nowDone=t.done;
+  }
   t.updatedAt=new Date().toISOString();
   persistLocal(); renderAll(); queueEvent(t);
   reopenPopAfter(t.id,key,xy);
-  toast(t.done?'완료로 표시했어요 — 흑색으로 바뀝니다':'완료를 풀었어요');
+  toast(nowDone?'완료로 표시했어요 — 흑색으로 바뀝니다':'완료를 풀었어요');
 }
 function reopenPopAfter(id,key,xy){
   let k=(key&&OCC.has(key))?key:null;
@@ -3798,7 +3826,7 @@ function kNormEvent(e,ids){
   const ev={
     id:String(e.id||uid()), title:String(e.title||''),
     childIds:Array.isArray(e.childIds)?e.childIds.filter(function(x){ return ids.indexOf(x)>=0; }):[],
-    cat:KCATS[e.cat]?e.cat:'etc', color:String(e.color||''), done:!!e.done, date:date,
+    cat:KCATS[e.cat]?e.cat:'etc', color:String(e.color||''), done:!!e.done, doneDates:(Array.isArray(e.doneDates)?e.doneDates:[]).map(String).filter(Boolean), date:date,
     endDate:(endDate&&endDate>date)?endDate:'',
     allDay:!!e.allDay||!e.start,
     start:e.start?String(e.start).slice(0,5):'', end:e.end?String(e.end).slice(0,5):'',
@@ -4199,11 +4227,11 @@ function kDayCard(label,date,occ,isToday){
     const nowM=kToVal(HM(new Date()));
     h+='<div class="ktem">';
     occ.forEach(function(o){
-      const ev=o.ev, cat=KCATS[ev.cat]||KCATS.etc;
+      const ev=o.ev, cat=KCATS[ev.cat]||KCATS.etc, done=kIsDone(ev,o.date);
       const past=isToday&&!ev.allDay&&ev.end&&kToVal(ev.end)<nowM;
       const ongoing=isToday&&!ev.allDay&&ev.start&&kToVal(ev.start)<=nowM&&(!ev.end||kToVal(ev.end)>=nowM);
-      h+='<button class="kitem'+(past?' past':'')+(ongoing?' now':'')+(ev.done?' done':'')+'" data-kev="'+esc(ev.id)+'" data-kdate="'+o.date+'">'
-        +'<span class="kbar" style="background:'+(ev.done?'#1e293b':kColorOf(ev))+'"></span>'
+      h+='<button class="kitem'+(past?' past':'')+(ongoing?' now':'')+(done?' done':'')+'" data-kev="'+esc(ev.id)+'" data-kdate="'+o.date+'">'
+        +'<span class="kbar" style="background:'+(done?'#1e293b':kColorOf(ev))+'"></span>'
         +'<span class="ktime">'+(ev.allDay?'종일':esc(ev.start)+(ev.end?'–'+esc(ev.end):''))+'</span>'
         +'<span class="kmain"><span class="kti">'+esc(ev.title)+kKidBadges(ev)+'</span>'
         +'<span class="kmeta">'+kMeta(ev,o)+'</span></span></button>';
@@ -4240,7 +4268,7 @@ function renderKidHome(){
       const occ=kOcc(d,d);
       const seen={}, dots=[];
       occ.forEach(function(o){
-        kKidsOf(o.ev).forEach(function(id){ if(seen[id]) return; seen[id]=1; dots.push('<i style="background:'+esc(o.ev.done?'#1e293b':kColorOf(o.ev))+'"></i>'); });
+        kKidsOf(o.ev).forEach(function(id){ if(seen[id]) return; seen[id]=1; dots.push('<i style="background:'+esc(kIsDone(o.ev,o.date)?'#1e293b':kColorOf(o.ev))+'"></i>'); });
       });
       let lines='';
       occ.slice(0,2).forEach(function(o){ lines+='<span class="kdl">'+esc(o.ev.title)+'</span>'; });
@@ -4260,7 +4288,7 @@ function renderKidHome(){
       const occ=kOcc(d,d);
       let pills='';
       occ.slice(0,2).forEach(function(o){
-        pills+='<span class="kh-mpill'+(o.ev.done?' done':'')+'" style="background:'+esc(kColorOf(o.ev))+'">'+esc(o.ev.title)+'</span>';
+        pills+='<span class="kh-mpill'+(kIsDone(o.ev,o.date)?' done':'')+'" style="background:'+esc(kColorOf(o.ev))+'">'+esc(o.ev.title)+'</span>';
       });
       if(occ.length>2) pills+='<span style="font-size:9px;color:#64748b">+'+(occ.length-2)+'</span>';
       grid+='<button type="button" class="kh-mcell'+(inM?'':' out')+(d===today?' today':'')+(d===sel?' sel':'')+(dw===0?' sun':'')+'" data-khday="'+d+'">'
@@ -4337,11 +4365,11 @@ function renderKidWeek(overrideKh){
       plist.forEach(function(o){
         OCC.set(o.key,o);
         const t=(!o.allDay&&o.start)?fmtTime(o.start)+' ':'';
-        const c=evColor(o.ev,o.cal);
-        chips.push('<button class="kachip" style="background:'+c+'" data-pkey="'+esc(o.key)+'" data-pkev="'+esc(o.ev.id)+'" data-pkdate="'+da+'">'+esc(t+(o.ev.title||'(제목 없음)'))+'</button>');
+        const done=isEvDone(o.ev,o.occDate), c=evColor(o.ev,o.cal,o.occDate);
+        chips.push('<button class="kachip'+(done?' done':'')+'" style="background:'+c+'" data-pkey="'+esc(o.key)+'" data-pkev="'+esc(o.ev.id)+'" data-pkdate="'+da+'">'+esc(t+(o.ev.title||'(제목 없음)'))+'</button>');
       });
       klist.forEach(function(o){
-        chips.push('<button class="kachip'+(o.ev.done?' done':'')+'" style="background:'+kColorOf(o.ev)+'" data-kev="'+esc(o.ev.id)+'" data-kdate="'+o.date+'">'+esc(o.ev.title)+'</button>');
+        chips.push('<button class="kachip'+(kIsDone(o.ev,o.date)?' done':'')+'" style="background:'+kColorOf(o.ev)+'" data-kev="'+esc(o.ev.id)+'" data-kdate="'+o.date+'">'+esc(o.ev.title)+'</button>');
       });
       h+='<div class="kacell">'+chips.slice(0,5).join('')+(chips.length>5?'<span class="kbadge">+'+(chips.length-5)+'</span>':'')+'</div>';
     }
@@ -4382,7 +4410,7 @@ function renderKidWeek(overrideKh){
     bars.forEach(function(b){
       const top=(b.s-minH*60)/60*kh, hgt=Math.max(19,(b.e-b.s)/60*kh-2);
       const w=100/ncol, left=b.col*w;
-      h+='<button class="kblk'+(hgt<32?' tiny':'')+(b.o.ev.done?' done':'')+'" data-kev="'+esc(b.o.ev.id)+'" data-kdate="'+b.o.date+'" style="--c:'+kColorOf(b.o.ev)+';background:'+kColorOf(b.o.ev)+';top:'+top+'px;height:'+hgt+'px;left:calc('+left+'% + 1px);width:calc('+w+'% - 2px)">'
+      h+='<button class="kblk'+(hgt<32?' tiny':'')+(kIsDone(b.o.ev,b.o.date)?' done':'')+'" data-kev="'+esc(b.o.ev.id)+'" data-kdate="'+b.o.date+'" style="--c:'+kColorOf(b.o.ev)+';background:'+kColorOf(b.o.ev)+';top:'+top+'px;height:'+hgt+'px;left:calc('+left+'% + 1px);width:calc('+w+'% - 2px)">'
         +'<b>'+esc(b.o.ev.title)+'</b><span>'+esc(b.o.ev.start)+(b.o.ev.place?' · '+esc(b.o.ev.place):'')+'</span></button>';
     });
     if(d===today){
@@ -5551,7 +5579,7 @@ function fbEvToDoc(ev){
     allDay:!!ev.allDay, repeat:fbStr(ev.repeat||'none')||'none', rrule:fbStr(ev.rrule),
     exdates:(Array.isArray(ev.exdates)?ev.exdates:[]).map(fbStr).filter(Boolean),
     calId:fbStr(ev.calId), location:fbStr(ev.location), memo:fbStr(ev.memo),
-    color:fbStr(ev.color), done:!!ev.done, lunar:!!ev.lunar,
+    color:fbStr(ev.color), done:!!ev.done, doneDates:(Array.isArray(ev.doneDates)?ev.doneDates:[]).map(fbStr).filter(Boolean), lunar:!!ev.lunar,
     lunarMonth:Number(ev.lunarMonth)||0, lunarDay:Number(ev.lunarDay)||0,
     googleId:fbStr(ev.googleId), googleSentAt:fbStr(ev.googleSentAt), updatedAt:fbStr(ev.updatedAt)
   };
@@ -5561,7 +5589,7 @@ function fbEvFromDoc(d,id){
   const ev=fbEvToDoc({
     id:fbStr(d.id||id), title:d.title, start:d.start, end:d.end, allDay:d.allDay,
     repeat:d.repeat, rrule:d.rrule, exdates:d.exdates, calId:d.calId, location:d.location,
-    memo:d.memo, color:d.color, done:d.done, lunar:d.lunar, lunarMonth:d.lunarMonth, lunarDay:d.lunarDay,
+    memo:d.memo, color:d.color, done:d.done, doneDates:d.doneDates, lunar:d.lunar, lunarMonth:d.lunarMonth, lunarDay:d.lunarDay,
     googleId:d.googleId, googleSentAt:d.googleSentAt, updatedAt:d.updatedAt
   });
   if(ev.allDay){ ev.start=fbStr(d.start).slice(0,10); ev.end=fbStr(d.end||d.start).slice(0,10); }
@@ -5581,7 +5609,7 @@ function fbKidToDoc(ev){
   return {
     id:fbStr(ev.id), title:fbStr(ev.title),
     childIds:(Array.isArray(ev.childIds)?ev.childIds:[]).map(fbStr).filter(Boolean),
-    cat:fbStr(ev.cat||'etc')||'etc', color:fbStr(ev.color), done:!!ev.done, date:fbStr(ev.date).slice(0,10),
+    cat:fbStr(ev.cat||'etc')||'etc', color:fbStr(ev.color), done:!!ev.done, doneDates:(Array.isArray(ev.doneDates)?ev.doneDates:[]).map(fbStr).filter(Boolean), date:fbStr(ev.date).slice(0,10),
     endDate:fbStr(ev.endDate).slice(0,10), allDay:!!ev.allDay,
     start:fbStr(ev.start).slice(0,5), end:fbStr(ev.end).slice(0,5),
     place:fbStr(ev.place), memo:fbStr(ev.memo),

@@ -1,0 +1,44 @@
+rules_version = '2';
+
+// =====================================================================
+// 내 캘린더 — Firestore 보안 규칙 (혼자 쓰는 개인 캘린더)
+// ---------------------------------------------------------------------
+// ① 아래 "여기에_본인_구글이메일" 을 본인 Google 계정 이메일로 바꿉니다.
+//    (따로 공유·초대 기능은 없습니다. 이 한 곳만 바꾸면 끝입니다.)
+// ② Firebase 콘솔 → Firestore Database → 규칙(Rules) 탭에 이 파일 전체를
+//    붙여넣고 [게시(Publish)] 를 누릅니다.
+//
+// 이 규칙이 하는 일
+//  · 로그인한 사람의 uid 아래(users/{uid}/...)만 읽고 쓸 수 있습니다.
+//    → 다른 사람이 같은 앱 주소·설정으로 들어와도 남의 데이터에는 닿지 못합니다.
+//  · 이메일이 위에 적은 계정과 다르면 읽기도 쓰기도 거부됩니다.
+//    → 앱의 'Google 로그인'이 통과해도 규칙이 마지막으로 막아 줍니다.
+//  · 로그인하지 않은(익명) 접근은 모두 거부됩니다.
+//  · 이메일 인증이 안 된 계정도 거부됩니다.
+//
+// 참고: Firebase 설정(apiKey 등)은 공개되어도 되는 값입니다. 실제 잠금은
+//       이 규칙과 Google 로그인이 담당합니다.
+// =====================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ▼▼▼ 이 한 줄만 본인 구글 이메일로 바꾸세요 ▼▼▼
+    function ownerEmail() { return "여기에_본인_구글이메일"; }
+
+    function isOwner(uid) {
+      return request.auth != null
+          && request.auth.uid == uid
+          && request.auth.token.email_verified == true
+          && request.auth.token.email == ownerEmail();
+    }
+
+    // 일정(events) · 캘린더(calendars) · 육아 일정(kidsEvents) · 아이 프로필(kidsProfile/main)
+    // 모두 로그인한 본인 uid 아래에서만 읽고 쓸 수 있습니다.
+    match /users/{uid}/{document=**} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // 그 밖의 경로는 여기에 허용 규칙이 없으므로 기본적으로 모두 거부됩니다.
+  }
+}

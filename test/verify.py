@@ -253,6 +253,84 @@ with sync_playwright() as p:
         page.click('#viewTabs [data-viewtab="week"]')   # 다음 단계(끌어 만들기)는 주간 화면에서 시작합니다
         page.wait_for_timeout(500)
     step("date_number_day", date_number_day)
+    def month_wheel():
+        # 월간 보기에서 마우스 휠: 내리면 다음 달, 올리면 이전 달
+        page.click('#viewTabs [data-viewtab="month"]')
+        page.wait_for_timeout(450)
+        page.click("#todayBtn")
+        page.wait_for_timeout(450)
+        base = page.inner_text("#htitle")
+        cell = page.locator("#monthBody .cell").nth(20)
+        cb = cell.bounding_box()
+        page.mouse.move(cb["x"] + cb["width"] / 2, cb["y"] + cb["height"] / 2)
+
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(500)
+        nxt = page.inner_text("#htitle")
+        report["wheel_next"] = [base, nxt]
+        assert nxt != base, "휠을 내렸는데 다음 달로 넘어가지 않았습니다"
+
+        page.mouse.wheel(0, -120)
+        page.wait_for_timeout(500)
+        back = page.inner_text("#htitle")
+        report["wheel_prev"] = [nxt, back]
+        assert back == base, f"휠을 올렸는데 이전 달로 돌아오지 않았습니다 ({back} != {base})"
+
+        # 한 번에 여러 달이 넘어가지 않도록 쿨다운
+        page.mouse.wheel(0, 120)
+        page.mouse.wheel(0, 120)
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(600)
+        one = page.inner_text("#htitle")
+        report["wheel_cooldown"] = one
+        assert one == nxt, f"쿨다운이 없어 여러 달이 넘어갔습니다 ({one}, 기대 {nxt})"
+
+        # 설정 창이 열려 있으면 월이 바뀌지 않음
+        page.click("#settingsBtn")
+        page.wait_for_timeout(400)
+        page.mouse.move(cb["x"] + 8, cb["y"] + 8)
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(400)
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(450)
+        report["wheel_modal"] = page.inner_text("#htitle")
+        assert page.inner_text("#htitle") == one, "편집 창이 열려 있는데 달이 넘어갔습니다"
+        page.click("#setClose")
+        page.wait_for_timeout(300)
+        page.screenshot(path=str(OUT / "03c-month-wheel.png"))
+
+        # 사이드바 위에서는 월이 바뀌지 않음
+        page.mouse.move(120, 400)
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(400)
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(400)
+        report["wheel_sidebar"] = page.inner_text("#htitle")
+        assert page.inner_text("#htitle") == one, "사이드바 위에서 달이 넘어갔습니다"
+
+        # 주·일·일정 보기에서는 달 이동 없이 그대로 스크롤
+        page.click('#viewTabs [data-viewtab="week"]')
+        page.wait_for_timeout(450)
+        week_head = page.inner_text("#htitle")
+        before_top = page.evaluate("document.querySelector('.tv-scrollwrap').scrollTop")
+        box = page.locator("#tvInner").bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + 200)
+        page.mouse.wheel(0, 240)
+        page.wait_for_timeout(500)
+        after_top = page.evaluate("document.querySelector('.tv-scrollwrap').scrollTop")
+        report["wheel_week_head"] = [week_head, page.inner_text("#htitle")]
+        report["wheel_week_scroll"] = [before_top, after_top]
+        assert page.locator("#viewTime").is_visible(), "주간 보기가 휠로 바뀌었습니다"
+        assert page.inner_text("#htitle") == week_head, "주간 보기 머리(주 범위)가 휠로 바뀌었습니다"
+        assert after_top != before_top, "주간 보기의 세로 스크롤이 휠에 막혔습니다"
+        page.click('#viewTabs [data-viewtab="month"]')
+        page.wait_for_timeout(450)
+        page.click("#todayBtn")
+        page.wait_for_timeout(400)
+        page.click('#viewTabs [data-viewtab="week"]')   # 다음 단계(끌어 만들기)는 주간 화면에서 시작합니다
+        page.wait_for_timeout(450)
+    step("month_wheel", month_wheel)
+
 
     def drag_create():
         col = page.locator("#tvInner .tday").nth(2)
@@ -748,6 +826,8 @@ with sync_playwright() as p:
         rp.wait_for_timeout(350)
         rp.fill("#mTitle", "맞춤 반복 일정")
         rp.fill("#mStartDate", mday(1))
+        rp.set_checked("#mAllDay", False)     # v1.3.2부터 새 일정은 '종일'이 기본 — 시간 일정은 끄고 넣습니다
+        rp.wait_for_timeout(200)
         rp.fill("#mStartTime", "10:00")
         rp.fill("#mEndTime", "11:00")
         rp.select_option("#mRepeat", "custom")

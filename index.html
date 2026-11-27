@@ -9,7 +9,7 @@
 <title>내 캘린더</title>
 <script>
 /* ── 첫 로딩 안내: 시트에서 불러오는 동안 경과 초를 보여 준다. 이 기기에 내 데이터가 있으면 띄우지 않는다. */
-window.__LG_CFG = { keys: ["pcal.events.v1", "pcal.kids.events.v1"], msg: '시트에서 불러오는 중…', accent: '#3182F6', bg: '#F7F8FA' };
+window.__LG_CFG = { keys: ["pcal.events.v1", "pcal.kids.events.v1"], msg: '일정을 불러오는 중…', accent: '#3182F6', bg: '#F7F8FA' };
 (function(){
   var cfg = window.__LG_CFG;
   function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
@@ -20,6 +20,10 @@ window.__LG_CFG = { keys: ["pcal.events.v1", "pcal.kids.events.v1"], msg: '시�
       for (var i = 0; i < localStorage.length; i++){ var v = lsGet(localStorage.key(i)) || ''; if (v.indexOf('script.google.com/macros/s/') >= 0) return true; }
     } catch(e){}
     return false;
+  }
+  function cloudConnected(){
+    /* Firebase 실시간 동기화 설정이 저장되어 있으면 클라우드에서 불러옵니다. */
+    try { return !!localStorage.getItem('pcal.fb.v1'); } catch(e){ return false; }
   }
   function hasLocalData(){
     if (!cfg.keys || !cfg.keys.length) return false;
@@ -55,7 +59,7 @@ window.__LG_CFG = { keys: ["pcal.events.v1", "pcal.kids.events.v1"], msg: '시�
     el = null;
   }
   window.LoadGate = { show: show, done: done, active: function(){ return !!el; }, label: label };
-  if (cfg.auto !== false && sheetConnected() && !hasLocalData()){
+  if (cfg.auto !== false && (sheetConnected() || cloudConnected()) && !hasLocalData()){
     if (document.body) show();
     else document.addEventListener('DOMContentLoaded', function(){ if (!el && !window.__LG_DONE) show(); });
   }
@@ -785,6 +789,43 @@ body.tab-kids .sidebar{display:none}
 @media (max-width:420px){
   .htitle{max-width:30vw}
 }
+
+/* ============================================================ Firebase 실시간 동기화 */
+.sync-chip.locked .dot{background:#f9ab00}
+#fbGate{
+  /* 앱 화면 위, 편집 창(.modal, 180)과 토스트(300) 아래 — 잠금 화면에서 확인 창을 띄울 수 있게 */
+  position:fixed; inset:0; z-index:170; display:flex; align-items:center; justify-content:center;
+  padding:20px; background:#F2F4F6;
+  font-family:"Google Sans","Roboto","Apple SD Gothic Neo","Malgun Gothic",system-ui,-apple-system,sans-serif;
+}
+#fbGate[hidden]{display:none !important}
+.fbg-card{
+  width:100%; max-width:392px; background:#fff; border-radius:18px; padding:28px 24px 20px;
+  box-shadow:0 8px 28px rgba(60,64,67,.22),0 2px 6px rgba(60,64,67,.12); text-align:center; color:#191F28;
+}
+.fbg-lock{font-size:34px;line-height:1}
+.fbg-card h2{margin:10px 0 2px;font-size:19px;letter-spacing:-.3px}
+.fbg-card p{margin:8px 0 0;font-size:13px;line-height:1.6;color:#5f6368}
+.fbg-btn{
+  width:100%; min-height:46px; margin-top:18px; border-radius:10px; background:#1a73e8; color:#fff;
+  display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:600;
+}
+.fbg-btn:hover{background:#1765cc}
+.fbg-btn:disabled{opacity:.55; cursor:default}
+.fbg-sub{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.fbg-sub button{font-size:12px;color:#5f6368;text-decoration:underline;padding:6px 6px;border-radius:6px}
+.fbg-sub button:hover{background:#f1f3f4}
+.fbg-msg{margin-top:12px;font-size:12px;line-height:1.55;color:#b3261e;min-height:15px;word-break:break-word}
+.fbsec textarea{width:100%;min-height:76px;resize:vertical;border:1px solid var(--line2);border-radius:8px;padding:8px 10px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#fff}
+.fbsec .row{gap:6px;flex-wrap:wrap}
+.badge.g{background:#e6f4ea;color:#137333}
+.badge.warn{background:#fef7e0;color:#b06000}
+@media (prefers-color-scheme:dark){
+  #fbGate{background:#17171C}
+  .fbg-card{background:#202027;color:#F2F4F6;box-shadow:none}
+  .fbg-card p,.fbg-sub button{color:#b8bcc4}
+  .fbsec textarea{background:#202027;color:#F2F4F6;border-color:#3c4043}
+}
 </style>
 </head>
 <body>
@@ -1168,8 +1209,23 @@ body.tab-kids .sidebar{display:none}
       <h2 id="setHead">설정</h2>
     </div>
     <div class="modal-body">
+      <div class="field fbsec" id="setFb" style="flex-direction:column;align-items:stretch;gap:8px">
+        <div class="sec-title">Firebase 실시간 동기화 <span class="badge" id="fbBadge">꺼짐</span></div>
+        <div class="hint">Firebase 콘솔의 <b>프로젝트 설정 → 내 앱 → SDK 설정 및 구성 → 구성</b> 값을 <b>그대로</b> 붙여넣으세요("const firebaseConfig = { … };" 통째로도 됨). 저장하면 PC에서 고친 일정이 <b>0.3초 안에</b> 휴대폰 화면에 새로고침 없이 나타나고, <b>Google 로그인한 본인 계정만</b> 읽고 쓸 수 있습니다.</div>
+        <textarea id="fbConfig" rows="3" spellcheck="false" placeholder='{ "apiKey": "…", "authDomain": "…", "projectId": "…", "appId": "…" }'></textarea>
+        <div class="row">
+          <button class="btn primary sm" id="fbSave">저장하고 연결</button>
+          <button class="btn sm" id="fbLoginBtn" hidden>Google 로그인</button>
+          <button class="btn text sm" id="fbLogoutBtn" hidden>로그아웃</button>
+          <button class="btn text sm" id="fbCopyLink">이 페이지 링크 복사(#fb=)</button>
+          <button class="btn text sm" id="fbOff">Firebase 설정 지우기</button>
+        </div>
+        <div class="hint" id="fbInfo"></div>
+        <div class="hint" id="fbMsg"></div>
+      </div>
       <div class="field" style="flex-direction:column;align-items:stretch;gap:8px">
         <div class="sec-title">비공개 구글 시트 연결 <span class="badge" id="setStatus">로컬</span></div>
+        <div class="hint" id="setSheetNote" hidden>Firebase를 쓰는 동안에는 이 시트 동기화를 쉼니다(설정은 그대로 남아 있고, Firebase를 끄면 다시 씁니다).</div>
         <div class="hint">Apps Script 웹 앱 주소(<code>.../exec</code>)를 넣으면 일정이 내 비공개 시트에 저장되고, 휴대폰·다른 PC에서도 같은 일정을 봅니다.</div>
         <div class="row" style="flex-wrap:nowrap">
           <input type="text" id="setUrl" placeholder="https://script.google.com/macros/s/.../exec" style="flex:1 1 auto;min-width:0">
@@ -1244,16 +1300,34 @@ body.tab-kids .sidebar{display:none}
 </div>
 
 <div id="toast"></div>
+
+<!-- Firebase 로그인 잠금 (설정만으로는 읽을 수 없고, Google 로그인을 통과해야 함) -->
+<div id="fbGate" hidden role="dialog" aria-modal="true" aria-labelledby="fbgTitle">
+  <div class="fbg-card">
+    <div class="fbg-lock" aria-hidden="true">🔒</div>
+    <h2 id="fbgTitle">내 캘린더 잠금</h2>
+    <p id="fbgText">Google 계정으로 로그인하면 이 기기의 일정이 클라우드와 실시간으로 이어집니다.</p>
+    <button class="fbg-btn" id="fbgLogin">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#fff" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/></svg>
+      <span id="fbgLoginText">Google로 로그인</span>
+    </button>
+    <div class="fbg-msg" id="fbgMsg"></div>
+    <div class="fbg-sub">
+      <button type="button" id="fbgSettings">Firebase 설정</button>
+      <button type="button" id="fbgOff">이 기기에서만 쓰기</button>
+    </div>
+  </div>
+</div>
 <input type="file" id="importFile" accept="application/json" hidden>
 <input type="file" id="kidsImportFile" accept="application/json" hidden>
 
 <script>
 /* =====================================================================
-   내 캘린더 — 단일 파일 앱 (v1.3.2)
+   내 캘린더 — 단일 파일 앱 (v2.0.0)
    개인 캘린더 + 육아 홈·시간표(아이 일정·준비물·학원 시간표)를 한 앱에 담았습니다.
    아래쪽 탭으로 👶 육아 홈 · 🗓️ 시간표 · 📅 개인 캘린더를 오갑니다.
-   로컬(localStorage) 또는 비공개 구글 시트(Apps Script)에 저장하고,
-   PC와 휴대폰이 화면으로 돌아올 때·1분마다 서로 맞춥니다.
+   저장: Firebase Firestore(실시간, Google 로그인 단독 잠금) / 비공개 구글 시트(App) / 이 브라우저.
+   Firebase를 쓰면 PC에서 고친 일정이 휴대폰 화면에 새로고침 없이 바로 나타납니다.
    ===================================================================== */
 (function(){
 'use strict';
@@ -1384,6 +1458,7 @@ function persistLocal(){
     localStorage.setItem(LS.cals, JSON.stringify(state.cals));
     localStorage.setItem(LS.prefs, JSON.stringify(PREFS));
   }catch(e){}
+  fbMirrorSoon();          // Firebase를 쓰는 중이면 바뀐 일정·캘린더만 클라우드로
 }
 function loadLocal(){
   try{
@@ -1397,9 +1472,13 @@ function loadLocal(){
 }
 
 /* ------------------------------------------------------------ 시트 연결 */
+/** 시트 백엔드 주소. Firebase를 쓰는 동안에도 「구글 캘린더로 보내기」 한 가지만은
+    예전에 연결해 둔 시트 주소로 보냅니다(설정에 남아 있는 경우). */
+function apiUrl(){ return state.url || ((fbMode()&&FB.sheetUrl)?FB.sheetUrl:''); }
 function apiGet(action,data){
   return new Promise((resolve,reject)=>{
-    if(!state.url) return reject(new Error('시트가 연결되어 있지 않습니다.'));
+    const base=apiUrl();
+    if(!base) return reject(new Error('시트가 연결되어 있지 않습니다.'));
     const cb='__pcalCb'+Math.random().toString(36).slice(2,8);   // 요청끼리 응답이 섞이지 않도록 매번 다른 이름
     const qs='action='+encodeURIComponent(action)
       +(data?('&d='+encodeURIComponent(JSON.stringify(data))):'')
@@ -1415,15 +1494,16 @@ function apiGet(action,data){
     }
     window[cb]=d=>{ finish(); resolve(d); };
     s.onerror=()=>{ finish(); reject(new Error('시트에 연결하지 못했습니다.')); };
-    s.src=state.url+(state.url.indexOf('?')>=0?'&':'?')+qs;
+    s.src=base+(base.indexOf('?')>=0?'&':'?')+qs;
     document.head.appendChild(s);
   });
 }
 /** 큰 저장(일정 통째로 올리기 등)은 text/plain POST 로 보내고, 막히면 JSONP 로 되돌아갑니다. */
 function apiPost(action,data){
-  if(!state.url) return Promise.reject(new Error('시트가 연결되어 있지 않습니다.'));
+  const base=apiUrl();
+  if(!base) return Promise.reject(new Error('시트가 연결되어 있지 않습니다.'));
   const body=JSON.stringify(Object.assign({action:action},data||{}));
-  return fetch(state.url,{method:'POST',mode:'cors',redirect:'follow',cache:'no-store',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
+  return fetch(base,{method:'POST',mode:'cors',redirect:'follow',cache:'no-store',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
     .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
     .then(t=>{
       let d; try{ d=JSON.parse(t); }catch(e){ throw new Error('응답을 읽지 못했습니다.'); }
@@ -1942,6 +2022,7 @@ function startAutoSync(){
 
 /** 동기화 칩을 눌렀을 때: 못 올린 변경을 올리고 시트를 다시 읽습니다. */
 function manualSync(){
+  if(fbMode()){ return Promise.resolve(fbManual()); }
   if(!state.url){ openSettings(); setMsg('먼저 시트를 연결해 주세요.'); toast('먼저 설정에서 시트를 연결해 주세요'); return Promise.resolve(); }
   setMsg('시트에서 불러오는 중…'); setSync('busy');
   return flushCals().then(()=>flushPending()).then(()=>kFlushProfile()).then(()=>kFlush()).then(()=>refreshFromRemote({force:true})).then(res=>{
@@ -1956,6 +2037,7 @@ function manualSync(){
 }
 
 function setSync(mode){
+  if(fbMode()){ fbRenderChip(); return; }
   const chip=$('#syncChip'); if(!chip) return;
   chip.classList.toggle('on', mode==='on');
   chip.classList.toggle('busy', mode==='busy');
@@ -1970,6 +2052,7 @@ function setSync(mode){
   $('#syncText').textContent=text;
 }
 function setSyncInfo(extra){
+  if(fbMode()){ fbRenderSettings(); return; }
   const el=$('#setSyncInfo'); if(!el) return;
   if(!state.url){ el.textContent='이 브라우저에만 저장 중입니다. 일정은 이 기기에만 남습니다.'; return; }
   const t=syncState.lastPull?new Date(syncState.lastPull):null;
@@ -1987,7 +2070,6 @@ function setStatus(t){
   const b=$('#setStatus'); if(!b) return;
   b.textContent=t; b.className='badge'+(t==='연결됨'?' g':'');
 }
-
 /* ------------------------------------------------------------ 반복 규칙 (RRULE) */
 const RR_FREQ={DAILY:'매일',WEEKLY:'매주',MONTHLY:'매월',YEARLY:'매년'};
 const RR_UNIT={DAILY:'일',WEEKLY:'주',MONTHLY:'개월',YEARLY:'년'};
@@ -2979,10 +3061,12 @@ function sendToGoogle(ev,btn){
       toast(err.message||'전송에 실패했어요');
     });
   };
-  if(!state.url){
+  if(!apiUrl()){
     return confirmDialog({
       title:'구글 캘린더로 보내기',
-      body:'지금은 시트가 연결되지 않은 데모/로컬 상태예요.\n실제로 보내지 않고 "전송됨" 표시만 해 둘까요?\n\n(설정에서 비공개 시트를 연결하면 진짜 내 구글 캘린더 기본 캘린더로 복사됩니다.)',
+      body:(fbMode()
+        ? '구글 캘린더로 보내기는 비공개 시트(Apps Script) 주소가 있어야 동작해요.\n지금은 보내지 않고 "전송됨" 표시만 해 둘까요?\n\n(Firebase는 PC·휴대폰 실시간 동기화를 맡고, 구글 캘린더 복사는 예전 시트 백엔드가 맡습니다.)'
+        : '지금은 시트가 연결되지 않은 데모/로컬 상태예요.\n실제로 보내지 않고 "전송됨" 표시만 해 둘까요?\n\n(설정에서 비공개 시트를 연결하면 진짜 내 구글 캘린더 기본 캘린더로 복사됩니다.)'),
       okText:'시뮬레이션'
     }).then(ok=>{
       if(!ok) return;
@@ -2998,6 +3082,40 @@ function sendToGoogle(ev,btn){
     });
   }
   return doSend();
+}
+
+/* ------------------------------------------------------------ 월간 휠 이동 */
+/* 개인 캘린더의 월간 보기에서 마우스 휠을 내리면 다음 달, 올리면 이전 달로 이동합니다.
+   · 트랙패드·고감도 마우스에서 한 번 굴릴 때 여러 달이 건너뛰지 않도록
+     누적 임계값(24px)과 쿨다운(300ms)을 둡니다.
+   · 편집 창·설정·팝오버·사이드바·검색 패널 위에서는 움직이지 않고,
+     주·일·일정 보기와 육아 탭의 스크롤은 그대로 둡니다. */
+const WHEEL_NAV={min:24, cool:300, reset:420};
+function wheelBlocked(el){
+  if(!el||!el.closest) return true;
+  return !!el.closest('#modal,#settings,#calModal,#kModal,#qa,#scope,#confirm,#pop,#searchPanel,#viewMenu,#fbGate,.sidebar,#mini,.searchpanel,.pop,.modal');
+}
+function bindMonthWheel(){
+  const area=$('#viewMonth'); if(!area) return;
+  let lockUntil=0, acc=0, dir0=0, lastAt=0;
+  area.addEventListener('wheel',function(e){
+    if(state.tab!=='cal' || state.view!=='month') return;
+    if(e.ctrlKey||e.metaKey) return;                       // 브라우저 확대·축소는 건드리지 않음
+    const dy=Math.abs(e.deltaY||0), dx=Math.abs(e.deltaX||0);
+    if(!dy || dx>dy) return;                               // 가로 제스처는 무시
+    if(wheelBlocked(e.target)) return;
+    const unit=(e.deltaMode===1)?16:(e.deltaMode===2?(innerHeight||800):1);
+    const delta=e.deltaY*unit;
+    const now=Date.now();
+    if(now<lockUntil){ e.preventDefault(); acc=0; return; } // 쿨다운 동안은 한 번만
+    e.preventDefault();                                     // 월간 보기에는 세로로 넘길 내용이 없음
+    const dir=delta>0?1:-1;
+    if(dir!==dir0 || now-lastAt>WHEEL_NAV.reset) acc=0;
+    dir0=dir; lastAt=now; acc+=Math.abs(delta);
+    if(acc<WHEEL_NAV.min) return;
+    acc=0; lockUntil=now+WHEEL_NAV.cool;
+    go(dir);
+  },{passive:false});
 }
 
 /* ------------------------------------------------------------ 캘린더 관리 */
@@ -3271,12 +3389,16 @@ function closeDrawer(){ document.body.classList.remove('drawer-open'); }
 
 /* ------------------------------------------------------------ 설정 */
 function setMsg(s){ const m=$('#setMsg'); if(m) m.textContent=s||''; }
+function closeSettings(){ hide($('#settings')); if(fbMode()&&!FB.user){ FB.gateHidden=false; fbRender(); } }
 function openSettings(){
-  $('#setUrl').value=state.url; setStatus(state.url?'연결됨':'로컬');
+  $('#setUrl').value=FB.sheetUrl||state.url;
+  setStatus(fbMode()?'쉼':(state.url?'연결됨':'로컬'));
   $('#setWeekStart').value=String(PREFS.weekStart);
-  $('#setVersion').textContent='내 캘린더 v1.3.2 · 일정 '+state.events.length+'개 · 캘린더 '+state.cals.length+'개 · 육아 일정 '+kidData.events.length+'개';
+  $('#setVersion').textContent='내 캘린더 v2.0.0 · 일정 '+state.events.length+'개 · 캘린더 '+state.cals.length+'개 · 육아 일정 '+kidData.events.length+'개'+(fbMode()?' · Firebase 실시간 동기화':'');
+  fbFillConfig();
   renderKidsSettings();
   setMsg(''); setSyncInfo();
+  fbRender();
   show($('#settings'));
 }
 function connectSheet(raw){
@@ -3319,7 +3441,7 @@ function importJSON(file){
     try{
       const d=JSON.parse(r.result);
       if(!d||!Array.isArray(d.events)) throw new Error('일정 형식이 아니에요');
-      confirmDialog({title:'가져오기',body:`일정 ${d.events.length}개를 이 브라우저에 덮어쓸까요?\n지금 일정(${state.events.length}개)은 사라집니다.`+(state.url?'\n\n연결된 시트의 일정도 이 내용으로 바뀝니다.':''),okText:'가져오기'}).then(ok=>{
+      confirmDialog({title:'가져오기',body:`일정 ${d.events.length}개를 이 브라우저에 덮어쓸까요?\n지금 일정(${state.events.length}개)은 사라집니다.`+(fbMode()?'\n\nFirebase 클라우드의 일정도 이 내용으로 바뀝니다.':(state.url?'\n\n연결된 시트의 일정도 이 내용으로 바뀝니다.':'')),okText:'가져오기'}).then(ok=>{
         if(!ok) return;
         state.events=d.events;
         if(Array.isArray(d.calendars)&&d.calendars.length) state.cals=d.calendars;
@@ -3327,6 +3449,7 @@ function importJSON(file){
         state.cals.forEach((c,i)=>{ c.order=i; if(!c.updatedAt) c.updatedAt=stamp; });
         calsMeta.edited=true; saveCalsMeta();
         pending={}; savePending(); persistLocal(); renderAll();
+        if(fbMode()){ fbMirror(); toast('가져왔어요 — 클라우드에도 반영 중입니다'); return; }
         if(state.url){
           api('saveAll',{events:eventsForSheet(state.events),calendars:state.cals,clear:true})
             .then(r=>{ if(!r||r.ok===false) throw new Error((r&&r.error)||''); knownIds=new Set(state.events.map(e=>String(e.id))); calsMeta.pending=null; calsMeta.known=state.cals.map(c=>String(c.id)); calsMeta.error=''; saveCalsMeta(); syncState.seenNonEmpty=state.events.length>0; syncState.strikes=0; saveSyncState(); toast('가져왔어요'); })
@@ -3339,12 +3462,19 @@ function importJSON(file){
 }
 function resetAll(){
   const n=state.events.length;
-  const body = state.url
-    ? `이 브라우저의 일정 ${n}개를 모두 지울까요?\n\n연결된 시트의 일정도 함께 지우므로 휴대폰·다른 PC에서도 사라집니다.\n되돌릴 수 없습니다.`
-    : '이 브라우저의 일정을 모두 지울까요?\n연결한 시트의 일정은 지워지지 않습니다.';
+  const body = fbMode()
+    ? `이 브라우저의 일정 ${n}개를 모두 지울까요?\n\nFirebase 클라우드의 일정도 함께 지우므로 휴대폰·다른 PC에서도 사라집니다.\n되돌릴 수 없습니다.`
+    : (state.url
+      ? `이 브라우저의 일정 ${n}개를 모두 지울까요?\n\n연결된 시트의 일정도 함께 지우므로 휴대폰·다른 PC에서도 사라집니다.\n되돌릴 수 없습니다.`
+      : '이 브라우저의 일정을 모두 지울까요?\n연결한 시트의 일정은 지워지지 않습니다.');
   confirmDialog({title:'전체 삭제',body:body,okText:'모두 지우기',danger:true}).then(ok=>{
     if(!ok) return;
     state.events=[]; pending={}; savePending(); persistLocal(); renderAll();
+    if(fbMode()){
+      fbMirror();
+      toast('모든 일정을 지웠어요');
+      return;
+    }
     if(state.url){
       api('saveAll',{events:[],calendars:state.cals,clear:true})
         .then(r=>{ if(!r||r.ok===false) throw new Error((r&&r.error)||''); knownIds=new Set(); saveSyncState(); toast('모든 기기에서 일정을 모두 지웠어요'); })
@@ -3454,6 +3584,7 @@ function kSaveLocal(){
     localStorage.setItem(KLS.events,JSON.stringify(kidData.events));
     localStorage.setItem(KLS.kids,JSON.stringify(kidData.children));
   }catch(e){}
+  fbMirrorSoon();          // Firebase를 쓰는 중이면 바뀐 육아 일정·아이 이름만 클라우드로
 }
 function kSaveSync(){
   try{
@@ -4523,13 +4654,26 @@ function bind(){
   $('#sideSettings').addEventListener('click',()=>{ closeDrawer(); openSettings(); });
   $('#syncChip').addEventListener('click',()=>{ closeDrawer(); manualSync(); });
   $('#syncChip').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); manualSync(); } });
+
+  /* Firebase 설정·로그인 */
+  $('#fbSave').addEventListener('click',fbSaveFromInput);
+  $('#fbLoginBtn').addEventListener('click',fbLogin);
+  $('#fbLogoutBtn').addEventListener('click',fbLogout);
+  $('#fbCopyLink').addEventListener('click',fbCopyLink);
+  $('#fbOff').addEventListener('click',fbTurnOff);
+  $('#fbgLogin').addEventListener('click',fbLogin);
+  $('#fbgOff').addEventListener('click',fbTurnOff);
+  $('#fbgSettings').addEventListener('click',()=>{ FB.gateHidden=true; fbRender(); openSettings(); });
+  $('#setClose').addEventListener('click',closeSettings);
+  window.addEventListener('online',function(){ if(fbMode()){ fbRender(); if(FB.user) fbMirror(); } });
+  window.addEventListener('offline',function(){ if(fbMode()) fbRender(); });
   $('#setRefresh').addEventListener('click',manualSync);
   $('#setClose').addEventListener('click',()=>hide($('#settings')));
   $('#setConnect').addEventListener('click',()=>connectSheet($('#setUrl').value));
   $('#setDisconnect').addEventListener('click',()=>{
     state.url=''; localStorage.removeItem(LS.url);
     // 주소에 남아 있는 #s= 링크도 지워 다시 열 때 되살아나지 않게 합니다.
-    if(readHash()){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} }
+    if(readHash()||fbHashCfg()){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} }
     setSync('off'); setStatus('로컬'); setSyncInfo();
     setMsg('연결을 끊었습니다. 일정은 이 브라우저에 남아 있어요.'+(pendingCount()?`\n시트에 못 올린 변경 ${pendingCount()}건은 다시 연결하면 올라갑니다.`:''));
     toast('시트 연결을 끊었어요');
@@ -4598,6 +4742,7 @@ function bind(){
 
   bindMonthDrag();
   bindTimeGrid();
+  bindMonthWheel();
 
   document.addEventListener('click',e=>{
     const vt=e.target.closest('[data-viewtab]');
@@ -4627,7 +4772,7 @@ function bind(){
       if(!$('#pop').hidden){ closePop(); return; }
       if(!$('#modal').hidden){ closeModal(); return; }
       if(!$('#calModal').hidden){ hide($('#calModal')); return; }
-      if(!$('#settings').hidden){ hide($('#settings')); return; }
+      if(!$('#settings').hidden){ closeSettings(); return; }
       if(!$('#kModal').hidden){ kCloseModal(); return; }
       if(!$('#searchPanel').hidden){ hideSearch(); return; }
       closeMenus();
@@ -4703,10 +4848,775 @@ function readHash(){
 function showHelp(){
   confirmDialog({
     title:'내 캘린더 도움말',
-    body:'· 날짜 칸을 누르면 그 자리에서 바로 등록할 수 있어요.\n· 일정 막대를 다른 날짜로 끌어 옮길 수 있어요(월간).\n· 날짜 숫자(월간의 숫자·주/일 화면 머리)를 누르면 그 날 일간 보기로 이동해요.\n· 일정 상세의 [✓ 완료]를 누르면 그 일정만 흑색 체크리스트로 바뀌고, 다시 누르면 풀려요. 수정 창에서 일정 하나만의 색도 고를 수 있어요.\n· 위의 월 · 주 · 일 · 일정 탭이나 단축키로 보기를 바꿀 수 있어요.\n· 주/일 화면의 빈 시간을 끌면 시간 범위로 새 일정을 만듭니다.\n· 시트를 연결하면 PC와 휴대폰이 자동으로 맞춰집니다 — 화면으로 돌아올 때와 1분마다 확인합니다. 왼쪽 아래 연결 칩을 누르면 바로 새로 고칩니다.\n· 상세 창의 [📤 구글 캘린더로 보내기]는 그 일정만 내 구글 캘린더 기본 캘린더에 복사합니다.\n\n단축키  T 오늘 · 1/D 일간 · 2/W 주간 · 3/M 월간 · 4/A 일정 · N 새 일정 · ←/→ 이동\n\n※ 이 앱은 알림(푸시)을 보내지 않습니다. 알림이 필요한 일정만 구글 캘린더로 보내세요.',
+    body:'· 날짜 칸을 누르면 그 자리에서 바로 등록할 수 있어요.\n· 일정 막대를 다른 날짜로 끌어 옮길 수 있어요(월간).\n· 날짜 숫자(월간의 숫자·주/일 화면 머리)를 누르면 그 날 일간 보기로 이동해요.\n· 일정 상세의 [✓ 완료]를 누르면 그 일정만 흑색 체크리스트로 바뀌고, 다시 누르면 풀려요. 수정 창에서 일정 하나만의 색도 고를 수 있어요.\n· 위의 월 · 주 · 일 · 일정 탭이나 단축키로 보기를 바꿀 수 있어요.\n· 주/일 화면의 빈 시간을 끌면 시간 범위로 새 일정을 만듭니다.\n· Firebase를 연결하면 PC에서 고친 일정이 휴대폰 화면에 새로고침 없이 바로 나타납니다(Google 로그인한 본인 계정만).\n· 시트를 연결한 경우에는 화면으로 돌아올 때와 1분마다 서로 맞춥니다. 왼쪽 아래 연결 칩을 누르면 바로 확인해요.\n· 상세 창의 [📤 구글 캘린더로 보내기]는 그 일정만 내 구글 캘린더 기본 캘린더에 복사합니다.\n\n단축키  T 오늘 · 1/D 일간 · 2/W 주간 · 3/M 월간 · 4/A 일정 · N 새 일정 · ←/→ 이동\n\n※ 이 앱은 알림(푸시)을 보내지 않습니다. 알림이 필요한 일정만 구글 캘린더로 보내세요.',
     okText:'알겠어요',
     hideCancel:true
   });
+}
+
+/* =====================================================================
+   Firebase 실시간 동기화 (Firestore) + Google 로그인 단독 잠금
+   ─────────────────────────────────────────────────────────────────────
+   · ⚙ 설정에 Firebase 콘솔의 설정(JSON 또는 객체 리터럴)을 붙여넣으면 이 브라우저
+     localStorage에만 저장됩니다.  [이 페이지 링크 복사] 로 만든 #fb= 링크로
+     다른 기기·공용 PC에서도 설정을 다시 치지 않고 열 수 있습니다.
+   · 저장된 설정만으로는 아무것도 읽지 못합니다. Google 로그인을 통과해야
+     users/{로그인한 uid}/... 아래 본인 데이터만 읽고 씁니다(보안 규칙으로 잠금).
+   · 이 기기의 상태(localStorage)가 기준이고, 클라우드와 다른 것만 주고받습니다.
+     onSnapshot 을 붙여 두어 PC에서 고치면 휴대폰 화면이 새로고침 없이 바뀝니다.
+   · 실제 일정 데이터·프로젝트 ID·API 키는 코드에 들어 있지 않습니다.
+   ===================================================================== */
+const FB_LS='pcal.fb.v1';                 // Firebase 설정(이 브라우저에만)
+const FB_SEEN_LS='pcal.fb.seen.v1';       // 이 기기가 클라우드에서 본 문서 ID
+const FB_VER='12.8.0';
+const FB_CDN='https://www.gstatic.com/firebasejs/'+FB_VER+'/';
+const FB = {
+  cfg:null, mod:null, app:null, auth:null, db:null,
+  user:null, uid:'',
+  status:'off',            // off | locked | connecting | busy | on | error | offline | denied
+  err:'',
+  booting:false, seeded:false, applying:false, serverSeen:false,
+  got:{events:false,cals:false,kids:false,profile:false},
+  known:{events:new Map(),cals:new Map(),kids:new Map(),profile:null},
+  dirty:new Set(), pendingDel:{}, unsubs:[], timer:null, gotTimer:null,
+  gateHidden:false, sheetUrl:'', tries:0, lastOk:0, authUnsub:null, writeErr:'',
+  lastToast:'', lastToastAt:0
+};
+let fbSeen={project:'',events:[],cals:[],kids:[]};
+
+function fbMode(){ return !!(FB.cfg && FB.cfg.apiKey && FB.cfg.projectId); }
+function fbSig(o){ try{ return JSON.stringify(o); }catch(e){ return ''; } }
+function fbStr(v){ return v==null?'':String(v); }
+function fbErrCode(err){ return String((err&&err.code)||''); }
+function fbErrMsg(err){
+  const c=fbErrCode(err), m=String((err&&err.message)||err||'');
+  if(/unauthorized-domain/i.test(c+m)) return '이 사이트 주소가 Firebase 승인된 도메인에 없습니다. 콘솔 → Authentication → Settings → 승인된 도메인에 지금 주소를 추가해 주세요.';
+  if(/operation-not-allowed/i.test(c+m)) return 'Google 로그인이 꺼져 있습니다. 콘솔 → Authentication → Sign-in method 에서 Google을 사용 설정해 주세요.';
+  if(/api-key-not-valid|invalid-api-key|api_key_invalid/i.test(c+m)) return 'API 키가 올바르지 않습니다. Firebase 설정을 다시 붙여넣어 주세요.';
+  if(/configuration-not-found|project-not-found/i.test(c+m)) return 'Firebase 프로젝트를 찾지 못했습니다. 프로젝트 ID와 API 키를 확인해 주세요.';
+  if(/permission-denied|insufficient/i.test(c+m)) return '이 Google 계정에는 접근 권한이 없습니다(보안 규칙).';
+  if(/unavailable|network|offline|timeout/i.test(c+m)) return '네트워크에 연결하지 못했습니다. 연결되면 자동으로 다시 맞춥니다.';
+  if(/popup-blocked/i.test(c+m)) return '로그인 창이 차단되었습니다. 잠시 뒤 다시 눌러 주세요.';
+  if(/popup-closed-by-user|cancelled-popup-request/i.test(c+m)) return '로그인을 취소했어요.';
+  return m||'알 수 없는 오류가 났습니다.';
+}
+
+/* --------------------------------------------------------- 설정 읽기/쓰기 */
+function fbNormalizeConfig(o){
+  if(!o||typeof o!=='object') return null;
+  const out={};
+  ['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId','measurementId']
+    .forEach(function(k){ if(typeof o[k]==='string'&&o[k].trim()) out[k]=o[k].trim(); });
+  if(!out.apiKey||!out.authDomain||!out.projectId) return null;
+  return out;
+}
+/** 붙여넣은 글에서 첫 { … } 덩어리를 꺼냅니다(const firebaseConfig = { … }; 도 됨). */
+function fbExtractObject(text){
+  const s=String(text||'');
+  const start=s.indexOf('{');
+  if(start<0) return '';
+  let depth=0, q=null, esc=false;
+  for(let i=start;i<s.length;i++){
+    const c=s[i];
+    if(q){ if(esc){ esc=false; continue; } if(c==='\\'){ esc=true; continue; } if(c===q) q=null; continue; }
+    if(c==='"'||c==="'"||c==='`'){ q=c; continue; }
+    if(c==='{') depth++;
+    else if(c==='}'){ depth--; if(depth===0) return s.slice(start,i+1); }
+  }
+  return '';
+}
+/** 따옴표 없는 키·홑따옴표·주석·끝 쉼표까지 받아 주는 작은 객체 리터럴 해석기.
+    (붙여넣은 글을 eval 하지 않습니다 — 실행하지 않고 값만 읽습니다.) */
+function fbParseLiteral(src){
+  let i=0;
+  function ws(){
+    for(;;){
+      const c=src[i];
+      if(c===' '||c==='\n'||c==='\r'||c==='\t'){ i++; continue; }
+      if(c==='/'&&src[i+1]==='/'){ while(i<src.length&&src[i]!=='\n') i++; continue; }
+      if(c==='/'&&src[i+1]==='*'){ i+=2; while(i<src.length&&!(src[i]==='*'&&src[i+1]==='/')) i++; i+=2; continue; }
+      break;
+    }
+  }
+  function str(q){
+    i++;
+    let s='';
+    while(i<src.length){
+      const c=src[i++];
+      if(c==='\\'){
+        const n=src[i++];
+        if(n==='n') s+='\n';
+        else if(n==='t') s+='\t';
+        else if(n==='r') s+='\r';
+        else if(n==='u'){ s+=String.fromCharCode(parseInt(src.substr(i,4),16)||0); i+=4; }
+        else s+=n;
+        continue;
+      }
+      if(c===q) return s;
+      s+=c;
+    }
+    throw new Error('따옴표가 닫히지 않았습니다');
+  }
+  function key(){
+    ws();
+    const c=src[i];
+    if(c==='"'||c==="'"||c==='`') return str(c);
+    const m=/^[A-Za-z0-9_$]+/.exec(src.slice(i));
+    if(!m) throw new Error('이름을 읽지 못했습니다');
+    i+=m[0].length;
+    return m[0];
+  }
+  function value(){
+    ws();
+    const c=src[i];
+    if(c==='{'){ i++; const o={}; for(;;){ ws(); if(src[i]==='}'){ i++; return o; } if(src[i]===','){ i++; continue; } const k=key(); ws(); if(src[i]===':') i++; o[k]=value(); } }
+    if(c==='['){ i++; const a=[]; for(;;){ ws(); if(src[i]===']'){ i++; return a; } if(src[i]===','){ i++; continue; } a.push(value()); } }
+    if(c==='"'||c==="'"||c==='`') return str(c);
+    const num=/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?/.exec(src.slice(i));
+    if(num){ i+=num[0].length; return Number(num[0]); }
+    const id=/^[A-Za-z_$][\w$]*/.exec(src.slice(i));
+    if(id){
+      i+=id[0].length;
+      if(id[0]==='true') return true;
+      if(id[0]==='false') return false;
+      if(id[0]==='null') return null;
+      return undefined;
+    }
+    throw new Error('값을 읽지 못했습니다');
+  }
+  const v=value(); ws();
+  return v;
+}
+function fbParseConfig(text){
+  const raw=String(text||'').trim();
+  if(!raw) return {ok:false, error:'Firebase 설정을 붙여넣어 주세요.'};
+  const objText=fbExtractObject(raw);
+  if(!objText) return {ok:false, error:'{ … } 모양의 Firebase 설정을 찾지 못했어요.'};
+  let obj=null;
+  try{ obj=JSON.parse(objText); }catch(e){}
+  if(!obj){ try{ obj=fbParseLiteral(objText); }catch(e){ obj=null; } }
+  const cfg=fbNormalizeConfig(obj);
+  if(!cfg) return {ok:false, error:'apiKey · authDomain · projectId 가 들어 있는 설정인지 확인해 주세요.'};
+  return {ok:true, cfg:cfg};
+}
+function fbHashCfg(){
+  const m=String(location.hash||'').match(/[#&]fb=([^&]+)/);
+  if(!m) return null;
+  let o=null;
+  try{ o=fbNormalizeConfig(JSON.parse(b64d(decodeURIComponent(m[1])))); }catch(e){ o=null; }
+  return o;
+}
+function fbLoadCfg(){
+  try{
+    const raw=localStorage.getItem(FB_LS);
+    if(raw) FB.cfg=fbNormalizeConfig(JSON.parse(raw));
+  }catch(e){}
+  const fromHash=fbHashCfg();
+  if(fromHash){ FB.cfg=fromHash; try{ localStorage.setItem(FB_LS, JSON.stringify(fromHash)); }catch(e){} }
+}
+function fbSaveCfg(cfg){
+  FB.cfg=cfg;
+  try{ localStorage.setItem(FB_LS, JSON.stringify(cfg)); }catch(e){}
+  fbLoadSeen();
+}
+function fbClearCfg(){
+  FB.cfg=null;
+  try{ localStorage.removeItem(FB_LS); }catch(e){}
+}
+function fbLoadSeen(){
+  fbSeen={project:'',events:[],cals:[],kids:[]};
+  try{
+    const s=JSON.parse(localStorage.getItem(FB_SEEN_LS)||'{}');
+    if(s && s.project===(FB.cfg&&FB.cfg.projectId)){
+      ['events','cals','kids'].forEach(function(k){ fbSeen[k]=Array.isArray(s[k])?s[k].map(String):[]; });
+      fbSeen.project=s.project;
+    }
+  }catch(e){}
+}
+function fbSaveSeen(){
+  try{ localStorage.setItem(FB_SEEN_LS, JSON.stringify({project:(FB.cfg&&FB.cfg.projectId)||'',events:fbSeen.events,cals:fbSeen.cals,kids:fbSeen.kids})); }catch(e){}
+}
+function fbSeenHas(col,id){ return fbSeen[col].indexOf(String(id))>=0; }
+function fbSeenAdd(col,id){
+  if(!fbSeen[col]) return;
+  const v=String(id);
+  if(fbSeen[col].indexOf(v)>=0) return;
+  fbSeen[col].push(v); fbSaveSeen();
+}
+
+/* --------------------------------------------------------- SDK 불러오기 */
+function fbLoadSdk(){
+  return Promise.all([
+    import(FB_CDN+'firebase-app.js'),
+    import(FB_CDN+'firebase-auth.js'),
+    import(FB_CDN+'firebase-firestore.js')
+  ]).then(function(m){ return {app:m[0], auth:m[1], fs:m[2]}; });
+}
+function fbRefFor(col,id){
+  const F=FB.mod.fs, db=FB.db, u=FB.uid;
+  if(col==='events') return id?F.doc(db,'users',u,'events',id):F.collection(db,'users',u,'events');
+  if(col==='cals')   return id?F.doc(db,'users',u,'calendars',id):F.collection(db,'users',u,'calendars');
+  if(col==='kids')   return id?F.doc(db,'users',u,'kidsEvents',id):F.collection(db,'users',u,'kidsEvents');
+  return F.doc(db,'users',u,'kidsProfile','main');
+}
+
+/* --------------------------------------------------------- 시작·로그인 */
+function fbBoot(){
+  if(!fbMode()||FB.booting) return;
+  FB.booting=true; FB.status='connecting'; FB.err=''; fbRender();
+  Promise.resolve().then(fbLoadSdk).then(function(mods){
+    FB.mod=mods;
+    const A=mods.auth, F=mods.fs;
+    FB.app=mods.app.getApps().length?mods.app.getApp():mods.app.initializeApp(FB.cfg);
+    FB.auth=A.getAuth(FB.app);
+    try{ A.setPersistence(FB.auth,A.browserLocalPersistence).catch(function(){}); }catch(e){}
+    try{
+      FB.db=F.initializeFirestore(FB.app,{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})});
+    }catch(e){
+      FB.db=F.getFirestore(FB.app);   /* 사생활 보호 모드 등 IndexedDB를 못 쓰면 메모리 캐시로 */
+    }
+    A.onAuthStateChanged(FB.auth,function(u){ fbOnAuth(u); });
+    FB.authUnsub=function(){ try{ A.onAuthStateChanged(FB.auth,function(){}); }catch(e){} };
+    try{ A.getRedirectResult(FB.auth).catch(function(err){ fbAuthError(err); }); }catch(e){}
+  }).catch(function(err){
+    FB.status='error'; FB.err=fbErrMsg(err); fbRender();
+    if(window.LoadGate) LoadGate.done();
+    fbToast('Firebase를 불러오지 못했어요 — '+FB.err,true);
+  }).then(function(){ FB.booting=false; });
+}
+function fbAuthError(err){
+  FB.err=fbErrMsg(err);
+  if(fbErrCode(err)||FB.err) fbToast('로그인 — '+FB.err,true);
+  fbRender();
+}
+function fbOnAuth(u){
+  if(u){
+    const changed=(FB.uid!==u.uid);
+    FB.user=u; FB.uid=u.uid; FB.err=''; FB.status='connecting'; FB.gateHidden=false;
+    if(changed){
+      FB.seeded=false; FB.tries=0; FB.serverSeen=false;
+      FB.known={events:new Map(),cals:new Map(),kids:new Map(),profile:null};
+      FB.dirty=new Set(); FB.pendingDel={};
+    }
+    fbStartSync();
+  }else{
+    FB.user=null; FB.uid=''; FB.status='locked';
+    fbStopSync();
+    if(window.LoadGate) LoadGate.done();
+  }
+  fbRender();
+}
+function fbStartSync(){
+  if(!FB.user||!FB.mod) return;
+  fbStopSync();
+  FB.got={events:false,cals:false,kids:false,profile:false};
+  FB.serverSeen=false;
+  ['events','cals','kids','profile'].forEach(fbListen);
+  if(FB.gotTimer) clearTimeout(FB.gotTimer);
+  FB.gotTimer=setTimeout(function(){ if(window.LoadGate) LoadGate.done(); },7000);
+  fbRender();
+}
+function fbStopSync(){
+  (FB.unsubs||[]).forEach(function(fn){ try{ fn(); }catch(e){} });
+  FB.unsubs=[];
+  if(FB.gotTimer){ clearTimeout(FB.gotTimer); FB.gotTimer=null; }
+}
+function fbListen(col){
+  const F=FB.mod.fs;
+  let un=null;
+  try{
+    un=F.onSnapshot(fbRefFor(col),{includeMetadataChanges:true},
+      function(snap){ fbOnSnap(col,snap); },
+      function(err){ fbOnSnapErr(col,err); });
+  }catch(err){ fbOnSnapErr(col,err); return; }
+  FB.unsubs.push(un);
+}
+function fbOnSnapErr(col,err){
+  const code=fbErrCode(err)+' '+String((err&&err.message)||'');
+  if(/permission-denied|unauthenticated/i.test(code)){ FB.status='denied'; FB.err='이 Google 계정에는 접근 권한이 없습니다(보안 규칙).'; }
+  else if(/unavailable|network|offline/i.test(code)){ FB.status=navigator.onLine===false?'offline':'error'; FB.err=''; }
+  else { FB.status='error'; FB.err=fbErrMsg(err); }
+  if(window.LoadGate) LoadGate.done();
+  fbRender();
+}
+
+/* --------------------------------------------------------- 문서 ↔ 화면 데이터 */
+function fbEvToDoc(ev){
+  ev=ev||{};
+  return {
+    id:fbStr(ev.id), title:fbStr(ev.title), start:fbStr(ev.start), end:fbStr(ev.end),
+    allDay:!!ev.allDay, repeat:fbStr(ev.repeat||'none')||'none', rrule:fbStr(ev.rrule),
+    exdates:(Array.isArray(ev.exdates)?ev.exdates:[]).map(fbStr).filter(Boolean),
+    calId:fbStr(ev.calId), location:fbStr(ev.location), memo:fbStr(ev.memo),
+    color:fbStr(ev.color), done:!!ev.done, googleId:fbStr(ev.googleId),
+    googleSentAt:fbStr(ev.googleSentAt), updatedAt:fbStr(ev.updatedAt)
+  };
+}
+function fbEvFromDoc(d,id){
+  d=d||{};
+  const ev=fbEvToDoc({
+    id:fbStr(d.id||id), title:d.title, start:d.start, end:d.end, allDay:d.allDay,
+    repeat:d.repeat, rrule:d.rrule, exdates:d.exdates, calId:d.calId, location:d.location,
+    memo:d.memo, color:d.color, done:d.done, googleId:d.googleId,
+    googleSentAt:d.googleSentAt, updatedAt:d.updatedAt
+  });
+  if(ev.allDay){ ev.start=fbStr(d.start).slice(0,10); ev.end=fbStr(d.end||d.start).slice(0,10); }
+  return ev;
+}
+function fbCalToDoc(c){
+  c=c||{};
+  return {id:fbStr(c.id), name:fbStr(c.name), color:fbStr(c.color)||'#039be5',
+    visible:c.visible!==false, order:Number(c.order)||0, updatedAt:fbStr(c.updatedAt)};
+}
+function fbCalFromDoc(d,id){
+  return {id:fbStr(d.id||id), name:fbStr(d.name), color:fbStr(d.color)||'#039be5',
+    visible:d.visible!==false, order:Number(d.order)||0, updatedAt:fbStr(d.updatedAt)};
+}
+function fbKidToDoc(ev){
+  ev=ev||{};
+  return {
+    id:fbStr(ev.id), title:fbStr(ev.title),
+    childIds:(Array.isArray(ev.childIds)?ev.childIds:[]).map(fbStr).filter(Boolean),
+    cat:fbStr(ev.cat||'etc')||'etc', date:fbStr(ev.date).slice(0,10),
+    endDate:fbStr(ev.endDate).slice(0,10), allDay:!!ev.allDay,
+    start:fbStr(ev.start).slice(0,5), end:fbStr(ev.end).slice(0,5),
+    place:fbStr(ev.place), memo:fbStr(ev.memo),
+    supplies:(Array.isArray(ev.supplies)?ev.supplies:[]).map(function(s){
+      const done=(s&&s.done&&typeof s.done==='object')?s.done:{};
+      return {id:fbStr(s&&s.id), text:fbStr(s&&s.text),
+        doneDates:Object.keys(done).filter(function(k){ return !!done[k]; }).sort()};
+    }).filter(function(s){ return s.text; }),
+    rrule:fbStr(ev.rrule), exdates:(Array.isArray(ev.exdates)?ev.exdates:[]).map(fbStr).filter(Boolean),
+    createdAt:fbStr(ev.createdAt), updatedAt:fbStr(ev.updatedAt)
+  };
+}
+function fbKidFromDoc(d,id){
+  const src=Object.assign({},d||{});
+  src.id=fbStr((d&&d.id)||id);
+  src.supplies=(Array.isArray(d&&d.supplies)?d.supplies:[]).map(function(s){
+    const done={};
+    const list=Array.isArray(s&&s.doneDates)?s.doneDates
+      :(s&&s.done&&typeof s.done==='object'?Object.keys(s.done).filter(function(k){ return s.done[k]; }):[]);
+    list.forEach(function(k){ done[fbStr(k)]=true; });
+    return {id:fbStr(s&&s.id), text:fbStr(s&&s.text), done:done};
+  });
+  return kNormEvent(src,kidData.children.map(function(c){ return c.id; }));
+}
+function fbKidsProfileDoc(){
+  const kids=(kidData.children||[]).map(function(c){
+    return {id:fbStr(c.id),name:fbStr(c.name),color:fbStr(c.color),updatedAt:fbStr(c.updatedAt)};
+  });
+  let stamp='';
+  (kidData.children||[]).forEach(function(c){ if(fbStr(c.updatedAt)>stamp) stamp=fbStr(c.updatedAt); });
+  return {children:kids, updatedAt:stamp};
+}
+function fbKidsProfileFromDoc(d){
+  return {children:kNormKids((d&&d.children)||[]), updatedAt:fbStr(d&&d.updatedAt)};
+}
+
+/* --------------------------------------------------------- 받기 (onSnapshot) */
+function fbOnSnap(col,snap){
+  if(!FB.user) return;
+  const meta=(snap&&snap.metadata)||{};
+  const fromCache=!!meta.fromCache;
+  let changed=false;
+  FB.applying=true;
+  try{
+    if(typeof snap.docChanges==='function'){
+      snap.docChanges().forEach(function(ch){
+        if(fbApplyDoc(col,ch.doc.id,ch.type,ch.doc.data())) changed=true;
+      });
+    }else if(typeof snap.exists==='function'){
+      if(fbApplyDoc(col,'main',snap.exists()?'added':'removed',snap.exists()?snap.data():null)) changed=true;
+    }
+    if(changed){ fbPersistFrom(col); renderAll(); }
+  }catch(e){ FB.lastErr=String((e&&e.stack)||e); try{ console.warn('fbOnSnap '+col, e); }catch(e2){} }
+  FB.applying=false;
+  if(!FB.got[col]){ FB.got[col]=true; fbFirstCheck(); }
+  if(!fromCache){
+    FB.serverSeen=true;
+    FB.lastOk=Date.now(); FB.err='';
+    FB.status=meta.hasPendingWrites?'busy':'on';
+    fbRender();
+  }
+}
+function fbPersistFrom(col){
+  if(col==='kids'||col==='profile') kSaveLocal(); else persistLocal();
+}
+function fbApplyDoc(col,id,type,data){
+  const key=col+'/'+id;
+  if(FB.dirty.has(key)) return false;
+  if(type!=='removed' && (!data||typeof data!=='object')) return false;
+  if(col==='profile'){
+    if(type==='removed'){ FB.known.profile=null; return false; }
+    const doc=fbKidsProfileDocFromDoc(data);
+    FB.known.profile=doc;
+    if(fbSig(doc.children)===fbSig(kidData.children)) return false;
+    kidData.children=doc.children;
+    return true;
+  }
+  const store=FB.known[col];
+  if(type==='removed'){
+    store.delete(String(id));
+    if(col==='events'){
+      const i=state.events.findIndex(function(e){ return String(e.id)===String(id); });
+      if(i<0) return false;
+      state.events.splice(i,1); return true;
+    }
+    if(col==='cals'){
+      const i=state.cals.findIndex(function(c){ return String(c.id)===String(id); });
+      if(i<0) return false;
+      state.cals.splice(i,1); return true;
+    }
+    const i=kidData.events.findIndex(function(e){ return String(e.id)===String(id); });
+    if(i<0) return false;
+    kidData.events.splice(i,1); return true;
+  }
+  if(col==='events'){
+    const doc=fbEvToDoc(data);
+    if(!doc.title&&!doc.start&&!doc.updatedAt) return false;
+    store.set(String(id),doc); fbSeenAdd('events',id);
+    const ev=fbEvFromDoc(data,id);
+    const i=state.events.findIndex(function(e){ return String(e.id)===String(id); });
+    if(i>=0){
+      if(fbSig(fbEvToDoc(state.events[i]))===fbSig(doc)) return false;
+      state.events[i]=ev; return true;
+    }
+    state.events.push(ev); return true;
+  }
+  if(col==='cals'){
+    const doc=fbCalToDoc(data);
+    if(!doc.name) return false;
+    store.set(String(id),doc); fbSeenAdd('cals',id);
+    const c=fbCalFromDoc(data,id);
+    const i=state.cals.findIndex(function(x){ return String(x.id)===String(id); });
+    if(i>=0){
+      if(fbSig(fbCalToDoc(state.cals[i]))===fbSig(doc)) return false;
+      state.cals[i]=c; return true;
+    }
+    state.cals.push(c); return true;
+  }
+  const ev=fbKidFromDoc(data,id);
+  if(!ev) return false;
+  const doc=fbKidToDoc(data);
+  store.set(String(id),doc); fbSeenAdd('kids',id);
+  const i=kidData.events.findIndex(function(e){ return String(e.id)===String(id); });
+  if(i>=0){
+    if(fbSig(fbKidToDoc(kidData.events[i]))===fbSig(doc)) return false;
+    kidData.events[i]=ev; return true;
+  }
+  kidData.events.push(ev); return true;
+}
+/** 첫 스냅샷이 다 도착하면 화면을 열고, 이 기기에만 있던 데이터를 한 번 합쳐 올립니다. */
+function fbFirstCheck(){
+  if(!FB.user) return;
+  fbRender();
+  if(!FB.got.events || !FB.serverSeen){
+    /* 오프라인 캐시만으로 떠 있을 때는 서버 확인 뒤에 병합합니다 —
+       캐시가 오래된 채로 클라우드를 덮어쓰지 않도록. */
+    if(FB.tries++<40) setTimeout(fbFirstCheck,500);
+    return;
+  }
+  if(window.LoadGate) LoadGate.done();
+  if(!FB.seeded){
+    FB.seeded=true;
+    fbMirror();                     // 이 브라우저에만 있던 일정·캘린더·육아 데이터를 id 기준으로 병합
+  }
+}
+
+/* --------------------------------------------------------- 보내기 (바뀐 것만) */
+function fbMirrorSoon(){
+  if(!fbMode()||!FB.user||!FB.mod) return;
+  if(FB.timer) clearTimeout(FB.timer);
+  FB.timer=setTimeout(function(){ FB.timer=null; fbMirror(); },140);
+}
+function fbMirror(){
+  if(!fbMode()||!FB.user||!FB.mod||FB.applying) return;
+  try{
+    fbMirrorCol('events',state.events.map(function(e){ return {id:e&&e.id,data:fbEvToDoc(e)}; }));
+    fbMirrorCol('cals',state.cals.map(function(c){ return {id:c&&c.id,data:fbCalToDoc(c)}; }));
+    fbMirrorCol('kids',kidData.events.map(function(e){ return {id:e&&e.id,data:fbKidToDoc(e)}; }));
+    fbMirrorProfile();
+    Object.keys(FB.pendingDel).forEach(function(k){ const p=FB.pendingDel[k]; fbDeleteNow(p.col,p.id); });
+  }catch(e){ /* 한 문서의 형식 오류가 나머지 저장을 막지 않게 */ }
+}
+function fbMirrorCol(col,items){
+  const store=FB.known[col];
+  const seenIds=new Set();
+  items.forEach(function(it){
+    const id=fbStr(it&&it.id);
+    if(!id) return;
+    seenIds.add(id);
+    const prev=store.get(id);
+    if(prev){
+      if(fbSig(prev)!==fbSig(it.data)) fbWrite(col,id,it.data);
+      return;
+    }
+    if(fbSeenHas(col,id)) return;      // 이 기기가 전에 본 문서 = 다른 기기에서 지운 것
+    if(!FB.seeded) return;             // 첫 병합은 서버 스냅샷을 본 뒤에
+    fbWrite(col,id,it.data);
+  });
+  if(!FB.seeded) return;
+  Array.from(store.keys()).forEach(function(id){
+    if(seenIds.has(String(id))) return;
+    if(FB.dirty.has(col+'/'+id)) return;
+    fbDelete(col,id);
+  });
+}
+function fbMirrorProfile(){
+  const doc=fbKidsProfileDoc();
+  const prev=FB.known.profile;
+  if(prev && fbSig(prev)===fbSig(doc)) return;
+  if(!prev && !FB.seeded) return;
+  fbWrite('profile','main',doc);
+}
+function fbWrite(col,id,data){
+  if(!FB.user||!FB.mod) return;
+  const key=col+'/'+id;
+  FB.dirty.add(key);
+  if(col==='profile') FB.known.profile=data; else FB.known[col].set(String(id),data);
+  if(FB.status==='on'){ FB.status='busy'; fbRender(); }
+  const F=FB.mod.fs;
+  let p;
+  try{ p=F.setDoc(fbRefFor(col,String(id)),data); }
+  catch(err){ p=Promise.reject(err); }
+  Promise.resolve(p).then(function(){
+    FB.lastOk=Date.now(); FB.err=''; FB.writeErr='';
+    FB.status=navigator.onLine===false?'offline':'on';
+    fbRender();
+  }).catch(function(err){
+    if(col==='profile') FB.known.profile=null; else FB.known[col].delete(String(id));
+    fbWriteFailed(err);
+  }).then(function(){ FB.dirty.delete(key); });
+}
+function fbDelete(col,id){
+  if(!FB.user||!FB.mod) return;
+  FB.pendingDel[col+'/'+id]={col:col,id:String(id)};
+  fbDeleteNow(col,id);
+}
+function fbDeleteNow(col,id){
+  const key=col+'/'+id;
+  FB.dirty.add(key);
+  const F=FB.mod.fs;
+  let p;
+  try{ p=F.deleteDoc(fbRefFor(col,String(id))); }
+  catch(err){ p=Promise.reject(err); }
+  Promise.resolve(p).then(function(){
+    delete FB.pendingDel[key];
+    if(col!=='profile') FB.known[col].delete(String(id));
+    FB.lastOk=Date.now(); FB.err=''; FB.writeErr='';
+    FB.status=navigator.onLine===false?'offline':'on';
+    fbRender();
+  }).catch(function(err){
+    fbWriteFailed(err);
+  }).then(function(){ FB.dirty.delete(key); });
+}
+function fbWriteFailed(err){
+  const code=fbErrCode(err)+' '+String((err&&err.message)||'');
+  FB.err=fbErrMsg(err);
+  FB.writeErr=FB.err;
+  FB.status=/permission-denied|unauthenticated/i.test(code)?'denied':'error';
+  fbRender();
+  fbToast('클라우드에 저장하지 못했어요 — '+FB.err,true);
+}
+function fbToast(msg,isErr){
+  const now=Date.now();
+  if(msg===FB.lastToast && now-FB.lastToastAt<4000) return;
+  FB.lastToast=msg; FB.lastToastAt=now;
+  toast(msg);
+}
+
+/* --------------------------------------------------------- 화면 표시 */
+function fbRender(){
+  fbRenderChip(); fbRenderGate(); fbRenderSettings();
+}
+function fbRenderChip(){
+  if(!fbMode()){ return; }
+  const chip=$('#syncChip'), tx=$('#syncText');
+  if(!chip||!tx) return;
+  let cls='', text='';
+  if(!FB.user){
+    cls='locked';
+    text=FB.status==='denied'?'로그인 계정 권한 없음':'🔒 Google 로그인 필요';
+  }else if(navigator.onLine===false){
+    cls='error'; text='오프라인 — 이 기기에 저장 중';
+  }else if(FB.status==='error'||FB.status==='denied'){
+    cls='error'; text='클라우드 동기화 오류 — 이 기기에 저장';
+  }else if(FB.writeErr){
+    cls='error'; text='저장 실패 — 다시 시도 중';
+  }else if(FB.status==='connecting'){
+    cls='busy'; text='실시간 연결 중…';
+  }else{
+    cls='on';
+    const t=new Date();
+    text='실시간 동기화 중 · '+pad(t.getHours())+':'+pad(t.getMinutes());
+  }
+  chip.classList.toggle('on',cls==='on');
+  chip.classList.toggle('busy',cls==='busy'||cls==='locked');
+  chip.classList.toggle('error',cls==='error');
+  tx.textContent=text;
+}
+function fbRenderGate(){
+  const el=$('#fbGate'); if(!el) return;
+  const lock=fbMode() && !FB.user && !FB.gateHidden;
+  el.hidden=!lock;
+  document.body.classList.toggle('fb-locked',lock);
+  if(!lock) return;
+  const p=$('#fbgText'), m=$('#fbgMsg'), b=$('#fbgLogin'), lb=$('#fbgLoginText');
+  let txt='Google 계정으로 로그인하면 이 기기의 일정이 클라우드와 실시간으로 이어집니다.';
+  if(FB.status==='connecting') txt='Google 계정을 확인하는 중이에요…';
+  else if(FB.status==='denied') txt='이 Google 계정은 이 캘린더에 접근할 수 없어요. 캘린더 주인 계정으로 다시 로그인해 주세요.';
+  else if(FB.status==='error') txt='클라우드에 연결하지 못했어요. 인터넷 연결과 Firebase 설정을 확인해 주세요.';
+  if(p) p.textContent=txt;
+  if(m) m.textContent=(FB.status==='denied'||FB.status==='error')?(FB.err||''):'';
+  if(b) b.disabled=(FB.status==='connecting');
+  if(lb) lb.textContent=(FB.status==='denied')?'다른 계정으로 로그인':'Google로 로그인';
+}
+function fbRenderSettings(){
+  const badge=$('#fbBadge'), info=$('#fbInfo');
+  if(badge){
+    let label='꺼짐', cls='badge';
+    if(fbMode()){
+      if(!FB.user){ label=FB.status==='denied'?'권한 없음':'로그인 필요'; cls='badge warn'; }
+      else if(FB.status==='error'){ label='오류'; cls='badge warn'; }
+      else if(FB.status==='connecting'){ label='연결 중'; }
+      else { label='실시간'; cls='badge g'; }
+    }
+    badge.textContent=label; badge.className=cls;
+  }
+  if(info){
+    let s='';
+    if(!fbMode()){
+      s='아직 Firebase를 연결하지 않았습니다. 위에 Firebase 설정을 붙여넣고 [저장하고 연결]을 누르세요.';
+    }else if(!FB.user){
+      s='Google 로그인 전입니다 — 로그인 전에는 클라우드 데이터를 읽지 않습니다. 이 기기에 저장된 일정은 로그인하면 자동으로 합쳐집니다.';
+    }else{
+      const t=FB.lastOk?new Date(FB.lastOk):null;
+      s='연결됨 · 실시간 동기화 중 · '+fbStr(FB.user.email||FB.uid)+' · 일정 '+state.events.length+'개 · 육아 일정 '+kidData.events.length+'개'
+        +(t?' · 마지막 반영 '+pad(t.getHours())+':'+pad(t.getMinutes()):'')
+        +((FB.writeErr||FB.err)?' — '+(FB.writeErr||FB.err):'');
+      if(navigator.onLine===false) s='오프라인 — 이 기기에 저장하고 있고, 연결되면 자동으로 올립니다.';
+    }
+    info.textContent=s;
+  }
+  const note=$('#setSheetNote'); if(note) note.hidden=!fbMode();
+  ['setUrl','setConnect','setRefresh','setUpload','setPushLocal','setDisconnect','setCopyLink'].forEach(function(id){
+    const el=$('#'+id); if(el) el.disabled=fbMode();
+  });
+  const lb=$('#fbLoginBtn'), ob=$('#fbLogoutBtn'), off=$('#fbOff');
+  if(lb){ lb.hidden=!fbMode()||!!FB.user; }
+  if(ob){ ob.hidden=!FB.user; }
+  if(off){ off.textContent='Firebase 설정 지우기'; }
+}
+function fbSetMsg(s){ const m=$('#fbMsg'); if(m) m.textContent=s||''; }
+function fbFillConfig(){
+  const t=$('#fbConfig'); if(!t) return;
+  t.value=FB.cfg?JSON.stringify(FB.cfg,null,2):'';
+}
+
+/* --------------------------------------------------------- 설정 단추 동작 */
+function fbSaveFromInput(){
+  const res=fbParseConfig($('#fbConfig').value);
+  if(!res.ok){ fbSetMsg(res.error); toast('Firebase 설정을 읽지 못했어요'); return; }
+  const before=FB.cfg?JSON.stringify(FB.cfg):'';
+  fbSaveCfg(res.cfg);
+  if(before!==JSON.stringify(res.cfg)){ fbSeen={project:'',events:[],cals:[],kids:[]}; fbSaveSeen(); }
+  fbSetMsg('Firebase 설정을 저장했습니다. Google 로그인을 해 주세요.');
+  fbFillConfig();
+  fbTeardown();
+  if(before!==JSON.stringify(res.cfg)) fbDestroyApp();
+  FB.seeded=false; FB.tries=0;
+  FB.known={events:new Map(),cals:new Map(),kids:new Map(),profile:null};
+  fbBoot();
+  toast('Firebase 설정을 저장했어요');
+}
+function fbTeardown(){
+  fbStopSync();
+  if(FB.authUnsub){ try{ FB.authUnsub(); }catch(e){} FB.authUnsub=null; }
+  FB.user=null; FB.uid=''; FB.status='off'; FB.err=''; FB.writeErr='';
+  FB.dirty=new Set(); FB.pendingDel={};
+  FB.known={events:new Map(),cals:new Map(),kids:new Map(),profile:null};
+}
+/** 설정을 바꾸면 예전 Firebase 앱을 버리고 새 설정으로 다시 시작합니다. */
+function fbDestroyApp(){
+  try{
+    if(FB.app && FB.mod && FB.mod.app.deleteApp) FB.mod.app.deleteApp(FB.app).catch(function(){});
+  }catch(e){}
+  FB.app=null; FB.auth=null; FB.db=null; FB.mod=null; FB.authUnsub=null;
+}
+function fbLogin(){
+  if(!fbMode()){ fbSetMsg('먼저 Firebase 설정을 저장해 주세요.'); return; }
+  if(!FB.mod||!FB.auth){ fbBoot(); setTimeout(fbLogin,1200); return; }
+  const A=FB.mod.auth;
+  let provider;
+  try{ provider=new A.GoogleAuthProvider(); provider.setCustomParameters({prompt:'select_account'}); }
+  catch(e){ provider={}; }
+  fbSetMsg('Google 로그인 창을 여는 중…');
+  A.signInWithPopup(FB.auth,provider).then(function(){
+    fbSetMsg('');
+    toast('Google 로그인됐어요');
+  }).catch(function(err){
+    const code=fbErrCode(err)+' '+String((err&&err.message)||'');
+    if(/popup-closed-by-user|cancelled-popup-request/i.test(code)){
+      fbSetMsg('로그인을 취소했어요.');
+      return;
+    }
+    if(/popup-blocked|operation-not-supported|cancelled/i.test(code)){
+      /* 모바일·설치형 앱에서 팝업이 막히면 같은 창에서 이동하는 방식으로 */
+      try{
+        Promise.resolve(A.signInWithRedirect(FB.auth,provider)).catch(function(e2){ fbAuthError(e2); });
+        return;
+      }catch(e2){}
+    }
+    fbAuthError(err);
+  });
+}
+function fbLogout(){
+  if(!FB.mod||!FB.auth||!FB.user){
+    FB.gateHidden=false; fbRender(); return;
+  }
+  confirmDialog({title:'로그아웃',body:'이 기기에서 로그아웃할까요?\n로그아웃하면 다시 Google 로그인하기 전까지 일정이 잠깁니다. 이 기기에 저장된 사본은 지워지지 않습니다.',okText:'로그아웃'}).then(function(ok){
+    if(!ok) return;
+    FB.mod.auth.signOut(FB.auth).catch(function(err){ fbAuthError(err); });
+  });
+}
+function fbTurnOff(){
+  confirmDialog({
+    title:'Firebase 연결 해제',
+    body:'Firebase 설정을 이 브라우저에서 지웁니다.\n\n· 이 기기에 저장된 일정은 그대로 남습니다.\n· 클라우드(Firestore)의 데이터도 지워지지 않습니다. 다시 연결하면 그대로 보입니다.',
+    okText:'해제', danger:true
+  }).then(function(ok){
+    if(!ok) return;
+    fbTeardown(); fbClearCfg();
+    FB.gateHidden=false; FB.status='off';
+    state.url=FB.sheetUrl||localStorage.getItem(LS.url)||'';
+    if(readHash()||fbHashCfg()){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} }
+    setStatus(state.url?'연결됨':'로컬');
+    setSync(state.url?'busy':'off'); setSyncInfo();
+    startAutoSync();
+    if(state.url) refreshFromRemote({force:true});
+    renderAll(); fbRender();
+    toast('Firebase 연결을 해제했어요 — 이 기기에서만 저장합니다');
+  });
+}
+function fbCopyLink(){
+  if(!fbMode()){ fbSetMsg('먼저 Firebase 설정을 저장해 주세요.'); return; }
+  const link=location.origin+location.pathname+'#fb='+b64e(JSON.stringify(FB.cfg));
+  const done=function(){ fbSetMsg('설정이 담긴 링크를 복사했어요. 다른 기기에서 열면 설정을 다시 치지 않아도 됩니다(로그인은 그 기기에서 따로).'); toast('링크를 복사했어요'); };
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done).catch(function(){ prompt('링크를 복사하세요',link); });
+  else prompt('링크를 복사하세요',link);
+}
+function fbManual(){
+  if(!fbMode()) return;
+  if(!FB.user){ FB.gateHidden=false; fbRender(); fbSetMsg('Google 로그인이 필요합니다.'); return; }
+  if(!FB.mod){ fbBoot(); return; }
+  FB.status='connecting'; fbRender();
+  fbMirror();
+  setTimeout(function(){
+    if(FB.status==='connecting'){ FB.status=navigator.onLine===false?'offline':'on'; fbRender(); }
+    toast(navigator.onLine===false?'오프라인 — 연결되면 자동으로 올라갑니다':'실시간으로 맞춰지고 있어요');
+  },500);
+  fbRender();
 }
 
 /* ------------------------------------------------------------ 시작 */
@@ -4723,6 +5633,10 @@ function init(){
     try{ if(localStorage.getItem(LS.url)!==hashUrl) localStorage.setItem(LS.url, hashUrl); }catch(e){}
   }
   else state.url=localStorage.getItem(LS.url)||'';
+  /* Firebase 실시간 동기화를 쓰면 예전 시트 동기화는 쉼니다(설정은 그대로 보관). */
+  fbLoadCfg(); fbLoadSeen();
+  FB.sheetUrl=state.url;
+  if(fbMode()) state.url='';
   if(!state.cals.length) state.cals=defaultCals();
   purgeSavedDemo();
   if(qs.get('d')){ const d=parseYMD(qs.get('d')); if(!isNaN(d.getTime())){ state.cursor=d; state.miniCursor=new Date(d.getFullYear(),d.getMonth(),1); } }
@@ -4732,19 +5646,25 @@ function init(){
   try{ kidFilter=localStorage.getItem(KLS.filter)||'all'; }catch(e){ kidFilter='all'; }
   if(kidFilter!=='all' && !kidData.children.some(function(c){ return c.id===kidFilter; })) kidFilter='all';
   kidWeekStart=kWeekStart(kToday());
-  $('#setUrl').value=state.url;
+  $('#setUrl').value=FB.sheetUrl||state.url;
   bind();
   bindKids();
   setSync(state.url?'busy':'off');
-  setStatus(state.url?'연결됨':'로컬');
+  setStatus(fbMode()?'쉼':(state.url?'연결됨':'로컬'));
   renderAll();
   setSyncInfo();
+  fbRender();
+  if(fbMode()){
+    /* 설정이 있으면 Google 로그인 전까지 잠깁니다 — 저장된 설정만으로는 아무것도 읽지 않습니다. */
+    if(window.LoadGate && !(function(){ try{ const v=localStorage.getItem(LS.events); return !!(v&&v.length>2); }catch(e){ return false; } })()) LoadGate.show('클라우드에서 불러오는 중…');
+    fbBoot();
+  }
   if(state.url){
     startAutoSync();
     flushCals().then(()=>flushPending()).then(()=>kFlushProfile()).then(()=>kFlush()).then(()=>refreshFromRemote({force:true}))
       .then(()=>{ if(window.LoadGate) LoadGate.done(); setSyncInfo(); })
       .catch(()=>{ if(window.LoadGate) LoadGate.done(); setSyncInfo(); });
-  } else if(window.LoadGate) LoadGate.done();
+  } else if(!fbMode() && window.LoadGate) LoadGate.done();
 }
 
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);

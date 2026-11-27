@@ -4834,15 +4834,20 @@ function bind(){
       return;
     }
     if(typing) return;
+    if(e.ctrlKey||e.metaKey||e.altKey) return;
     if(!$('#modal').hidden||!$('#calModal').hidden||!$('#settings').hidden||!$('#kModal').hidden||!$('#scope').hidden) return;
-    if(state.tab!=='cal'){ if(e.key.toLowerCase()==='n'){ e.preventDefault(); openKidModal(null,kToday()); } return; }
-    const k=e.key.toLowerCase();
-    if(k==='t'){ goToday(); }
-    else if(k==='m'||k==='3'){ setView('month'); }
-    else if(k==='w'||k==='2'){ setView('week'); }
-    else if(k==='d'||k==='1'){ setView('day'); }
-    else if(k==='a'||k==='4'){ setView('schedule'); }
-    else if(k==='n'){ e.preventDefault(); openModal({}); }
+    const k=e.key.toLowerCase(), code=e.code||'';
+    if(state.tab!=='cal'){
+      if(k==='t'||code==='KeyT'){ if(state.tab==='kidWeek'){ kidWeekStart=kWeekStart(kToday()); renderKidWeek(); } }
+      else if(k==='n'||code==='KeyN'){ e.preventDefault(); openKidModal(null,kToday()); }
+      return;
+    }
+    if(k==='t'||code==='KeyT'){ goToday(); }
+    else if(k==='m'||k==='3'||code==='KeyM'||code==='Digit3'){ setView('month'); }
+    else if(k==='w'||k==='2'||code==='KeyW'||code==='Digit2'){ setView('week'); }
+    else if(k==='d'||k==='1'||code==='KeyD'||code==='Digit1'){ setView('day'); }
+    else if(k==='a'||k==='4'||code==='KeyA'||code==='Digit4'){ setView('schedule'); }
+    else if(k==='n'||code==='KeyN'){ e.preventDefault(); openModal({}); }
     else if(k==='arrowleft'){ go(-1); }
     else if(k==='arrowright'){ go(1); }
     else if(k==='/'){ e.preventDefault(); $('#topbar').classList.add('search-open'); $('#q').focus(); }

@@ -3973,64 +3973,10 @@ function renderKidHome(){
   }
   strip+='</div>';
 
-  /* 준비물: 오늘~모레, 일정마다 가장 가까운 날 한 번만 */
-  const groups=[];
-  kOcc(today,kAdd(today,2)).forEach(function(o){
-    if(!o.ev.supplies.length) return;
-    for(let g=0;g<groups.length;g++) if(groups[g].ev.id===o.ev.id) return;
-    groups.push({ev:o.ev,date:o.date});
-  });
-  let supLeft=0, supTotal=0;
-  groups.forEach(function(g){ const st=kSupStats(g.ev,g.date); supTotal+=st.total; supLeft+=st.left; });
-
-  let sup='<section class="kcard"><div class="kcard-h"><h2>준비물 체크</h2><span class="ksub">오늘~모레</span>'
-    +'<span class="kright"><span class="kbadge'+(supLeft?' kwarn':'')+'">'+(supTotal?(supLeft?supLeft+'개 남음':'모두 준비'):'없음')+'</span></span></div>';
-  if(!supTotal){
-    sup+='<div class="ktem"><div class="kempty">오늘부터 모레까지 준비물이 없어요.</div></div>';
-  } else {
-    groups.forEach(function(g){
-      const st=kSupStats(g.ev,g.date);
-      sup+='<div class="kgroup"><div class="kgroup-h"><span class="kd" style="width:8px;height:8px;border-radius:50%;background:'+kColorOf(g.ev)+'"></span><b>'+esc(g.ev.title)+'</b><span class="kwhen">'+(g.date===today?'오늘':kLabel(g.date))+'</span><span class="kpg'+(st.left===0?' done':'')+'">'+st.done+'/'+st.total+'</span></div>';
-      g.ev.supplies.forEach(function(s){
-        sup+='<button class="ksup'+(kSupDone(g.ev,s,g.date)?' on':'')+'" data-ksup="'+esc(g.ev.id)+'" data-ksdate="'+g.date+'" data-ksid="'+esc(s.id)+'">'
-          +'<span class="kcb">'+KCHECK+'</span><span class="ktx">'+esc(s.text)+'</span></button>';
-      });
-      sup+='</div>';
-    });
-  }
-  sup+='</section>';
-
-  /* 임박한 행사 */
-  let upOcc=[];
-  kOcc(kAdd(today,1),kAdd(today,45)).forEach(function(o){
-    if(!(o.ev.cat==='event'||o.ev.cat==='hospital'||o.span>0)) return;
-    for(let u=0;u<upOcc.length;u++) if(upOcc[u].ev.id===o.ev.id) return;
-    upOcc.push(o);
-  });
-  upOcc=upOcc.slice(0,5);
-  let up='<section class="kcard"><div class="kcard-h"><h2>임박한 행사</h2><span class="ksub">앞으로 45일</span></div>';
-  if(!upOcc.length){
-    up+='<div class="ktem"><div class="kempty">예정된 행사가 없어요.</div></div>';
-  } else {
-    up+='<div class="ktem">';
-    upOcc.forEach(function(o){
-      const n=kDiff(today,o.date);
-      up+='<button class="kup" data-kev="'+esc(o.ev.id)+'" data-kdate="'+o.date+'">'
-        +'<span class="kdd'+(n<=3?' soon':'')+'"><b>'+(n===1?'내일':'D-'+n)+'</b>'+kLabel(o.date)+'</span>'
-        +'<span class="kum"><strong>'+esc(o.ev.title)+'</strong><span>'+esc((o.ev.allDay?'종일':o.ev.start)+(o.ev.place?' · '+o.ev.place:''))+'</span></span>'
-        +kKidBadges(o.ev)+'</button>';
-    });
-    up+='</div>';
-  }
-  up+='</section>';
-
   el.innerHTML='<div class="kcard">'+strip
     +'<div class="ksum"><span><b class="knum">'+todayOcc.length+'</b>오늘 일정</span><i></i>'
-    +'<span><b class="knum">'+weekOcc.length+'</b>이번 주</span><i></i>'
-    +'<span'+(supLeft?' class="kwarn"':'')+'><b class="knum">'+supLeft+'</b>준비물 남음</span></div></div>'
-    +'<div class="kp-grid"><div class="kp-col">'
-    +kDayCard('오늘',today,todayOcc,true)+kDayCard('내일',tomorrow,tomorrowOcc,false)
-    +'</div><div class="kp-col">'+sup+up+'</div></div>';
+    +'<span><b class="knum">'+weekOcc.length+'</b>이번 주</span></div></div>'
+    +kDayCard('오늘',today,todayOcc,true);
 }
 
 /* ------------------------------------------------------------ 육아: 주간 시간표 */

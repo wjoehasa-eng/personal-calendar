@@ -4910,20 +4910,31 @@ function fbNormalizeConfig(o){
   if(!out.apiKey||!out.authDomain||!out.projectId) return null;
   return out;
 }
-/** 붙여넣은 글에서 첫 { … } 덩어리를 꺼냅니다(const firebaseConfig = { … }; 도 됨). */
+/** 붙여넣은 글에서 apiKey가 들어 있는 { … } 덩어리를 찾습니다(import { … } 가 앞에 있어도 건너뜁니다). */
 function fbExtractObject(text){
   const s=String(text||'');
-  const start=s.indexOf('{');
-  if(start<0) return '';
-  let depth=0, q=null, esc=false;
-  for(let i=start;i<s.length;i++){
-    const c=s[i];
-    if(q){ if(esc){ esc=false; continue; } if(c==='\\'){ esc=true; continue; } if(c===q) q=null; continue; }
-    if(c==='"'||c==="'"||c==='`'){ q=c; continue; }
-    if(c==='{') depth++;
-    else if(c==='}'){ depth--; if(depth===0) return s.slice(start,i+1); }
+  const candidates=[];
+  let pos=0;
+  while(pos<s.length){
+    const start=s.indexOf('{',pos);
+    if(start<0) break;
+    let depth=0, q=null, esc=false, end=-1;
+    for(let i=start;i<s.length;i++){
+      const c=s[i];
+      if(q){ if(esc){ esc=false; continue; } if(c==='\\'){ esc=true; continue; } if(c===q) q=null; continue; }
+      if(c==='"'||c==="'"||c==='`'){ q=c; continue; }
+      if(c==='{') depth++;
+      else if(c==='}'){ depth--; if(depth===0){ end=i; break; } }
+    }
+    if(end<0) break;
+    const slice=s.slice(start,end+1);
+    candidates.push(slice);
+    pos=end+1;
   }
-  return '';
+  for(let i=0;i<candidates.length;i++){
+    if(/apiKey/i.test(candidates[i])&&/projectId/i.test(candidates[i])) return candidates[i];
+  }
+  return candidates[0]||'';
 }
 /** 따옴표 없는 키·홑따옴표·주석·끝 쉼표까지 받아 주는 작은 객체 리터럴 해석기.
     (붙여넣은 글을 eval 하지 않습니다 — 실행하지 않고 값만 읽습니다.) */

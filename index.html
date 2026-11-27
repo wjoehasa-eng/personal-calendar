@@ -990,9 +990,9 @@ body.tab-kids .sidebar{display:none}
 
   <!-- ======== 전환 탭 바 ======== -->
   <nav class="tabbar" id="tabBar" aria-label="화면 전환">
-    <button data-tab="kidHome" aria-label="육아 홈"><span class="em">👶</span><span class="lb">육아 홈</span></button>
+    <button data-tab="kidHome" aria-label="육아"><span class="em">👶</span><span class="lb">육아</span></button>
     <button data-tab="kidWeek" aria-label="시간표"><span class="em">🗓️</span><span class="lb">시간표</span></button>
-    <button data-tab="cal" aria-label="개인 캘린더"><span class="em">📅</span><span class="lb">개인 캘린더</span></button>
+    <button data-tab="cal" aria-label="캘린더"><span class="em">📅</span><span class="lb">캘린더</span></button>
   </nav>
 </div>
 
@@ -2464,7 +2464,7 @@ function renderHeader(){
   const appT=PREFS.appTitle||'내 캘린더';
   const bn=$('#bname'); if(bn) bn.textContent=appT;
   if(state.tab!=='cal'){
-    const t=(state.tab==='kidHome'?'육아 홈':'시간표');
+    const t=(state.tab==='kidHome'?'육아':'시간표');
     $('#htitle').textContent=t;
     document.title=t+' · '+appT;
     return;

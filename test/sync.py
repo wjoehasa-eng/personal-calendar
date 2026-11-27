@@ -51,6 +51,7 @@ class Backend:
         self.kids_children = []
         self.kids_events = {}
         self.fail = False
+        self.kids_fail = False          # 육아 저장만 실패시키는 스위치(통합 업로드 검증용)
         self.calls = []
         self.lock = threading.Lock()
 
@@ -77,6 +78,7 @@ class Backend:
         self.kids_children = [dict(c) for c in ((kids or {}).get("children") or [])]
         self.kids_events = {e["id"]: dict(e) for e in ((kids or {}).get("events") or [])}
         self.fail = False
+        self.kids_fail = False
         self.calls = []
 
     def load(self):
@@ -89,6 +91,8 @@ class Backend:
             self.calls.append(action)
             if self.fail and action not in ("ping", "load"):
                 return {"ok": False, "error": "모의 백엔드 저장 실패"}
+            if self.kids_fail and action in ("saveKidsEvent", "deleteKidsEvent", "saveKidsProfile"):
+                return {"ok": False, "error": "모의 백엔드 육아 저장 실패"}
             if action in ("ping", "status"):
                 return {"ok": True, "version": self.version, "now": "2026-11-26T00:00:00.000Z",
                         "sheet": "[비공개] 내 캘린더", "timezone": "Asia/Seoul"}
@@ -311,6 +315,35 @@ def new_page(ctx, tag="main", events=None):
     return page
 
 
+def seed_extra(ctx, kid_events=None, kid_children=None, known=None, kid_known=None, seen=True):
+    """앱이 켜지기 전 상태를 더 심습니다 — 이 기기에만 있던 육아 데이터, 시트에서 본 적 있는 ID 목록 등."""
+    parts = []
+    if kid_events is not None:
+        parts.append("localStorage.setItem('pcal.kids.events.v1', %s);" % json.dumps(json.dumps(kid_events)))
+    if kid_children is not None:
+        parts.append("localStorage.setItem('pcal.kids.kids.v1', %s);" % json.dumps(json.dumps(kid_children)))
+    if known is not None:
+        parts.append("localStorage.setItem('pcal.sync.v1', %s);" % json.dumps(json.dumps(
+            {"seenNonEmpty": seen, "strikes": 0, "lastPull": 0, "known": known, "backend": "1.2.0"})))
+    if kid_known is not None:
+        parts.append("localStorage.setItem('pcal.kids.sync.v1', %s);" % json.dumps(json.dumps(
+            {"known": kid_known, "seen": seen, "strikes": 0, "profileKnown": [], "unsupported": False})))
+    ctx.add_init_script("try{%s}catch(e){}" % "".join(parts))
+
+
+def kid_event(eid, title, date, start="16:00", end="17:00", updated="2026-11-25T00:00:00.000Z",
+              child="kid1", cat="academy"):
+    return {"id": eid, "title": title, "childIds": [child], "cat": cat, "date": date, "endDate": "",
+            "allDay": False, "start": start, "end": end, "place": "", "memo": "", "supplies": [],
+            "rrule": "", "exdates": [], "createdAt": updated, "updatedAt": updated}
+
+
+def kid_profile(names, updated="2026-11-25T00:00:00.000Z"):
+    colors = ["#3B82F6", "#F59E0B"]
+    return [{"id": "kid%d" % (i + 1), "name": n, "color": colors[i % len(colors)], "updatedAt": updated}
+            for i, n in enumerate(names)]
+
+
 def mock_route(route):
     try:
         return _mock_route(route)
@@ -528,7 +561,7 @@ with sync_playwright() as pw:
           bulk.inner_text("#setMsg"))
     bulk.close(); bulk_ctx.close()
 
-    # ---------------------------------------------------------------- 11. 시트가 빈 경우 이 기기 일정 보존
+    # ---------------------------------------------------------------- 11. 시트가 비어 있어도 기기 일정은 연결만으로 자동 업로드
     BACK.reset([])
     local_only = [
         ev("e-local-1", "이 기기에만 있던 일정", "2026-11-29T09:00", "2026-11-29T10:00"),
@@ -539,15 +572,18 @@ with sync_playwright() as pw:
     keep = new_page(keep_ctx, "keep", events=local_only)
     keep.wait_for_timeout(1500)
     check("11_local_kept_when_sheet_empty", len(titles(keep)) == 2, f"titles={titles(keep)}")
-    check("11_sheet_not_overwritten", len(BACK.events) == 0, str(BACK.events))
-    check("11_hint_shown", "비어" in keep.inner_text("#setSyncInfo") or "이 기기에만" in keep.inner_text("#setSyncInfo"),
-          keep.inner_text("#setSyncInfo"))
-    # 이 기기에만 있는 일정 올리기
+    # 새로 추가한 기능: 손으로 올리지 않아도 시트로 자동 업로드 됩니다.
+    check("11_auto_uploaded", wait_until(lambda: len(BACK.events) == 2, timeout=15), str(list(BACK.events)))
+    check("11_auto_uploaded_ids", all(k in BACK.events for k in ("e-local-1", "e-local-2")), str(list(BACK.events)))
+    check("11_pending_cleared", wait_until(lambda: len(stored(keep, "pcal.pending.v1")) == 0, timeout=10),
+          str(stored(keep, "pcal.pending.v1")))
+    check("11_no_duplicate", len(titles(keep)) == 2, f"titles={titles(keep)}")
+    # 이미 다 올라갔으니 「이 기기에만 있는 일정 올리기」 버튼도 숨어 있습니다.
+    check("11_push_local_hidden", wait_until(lambda: keep.evaluate("document.querySelector('#setPushLocal').hidden") is True, timeout=10),
+          keep.evaluate("document.querySelector('#setPushLocal').hidden"))
     keep.click("#settingsBtn")
     keep.wait_for_timeout(300)
-    keep.click("#setPushLocal")
-    keep.wait_for_timeout(1000)
-    check("11_push_local_only", wait_until(lambda: len(BACK.events) == 2), str(BACK.events))
+    check("11_hint_no_local_only", "이 기기에만" not in keep.inner_text("#setSyncInfo"), keep.inner_text("#setSyncInfo"))
 
     # ---------------------------------------------------------------- 12. #s= 링크로 연결한 기기도 기억함
     import base64
@@ -953,10 +989,91 @@ with sync_playwright() as pw:
           str([e.get("rrule") for e in stored(k2ph, "pcal.kids.events.v1")]))
     k2ph.click('#tabBar [data-tab="kidWeek"]')
     k2ph.wait_for_timeout(500)
+    # 오늘이 무슨 요일이든 월·화·목 회차가 있는 다음 주로 이동해 확인합니다(날짜에 따라 비는 일 방지).
+    if k2ph.locator("#kidWeek .kblk[data-kev]").count() == 0:
+        k2ph.click('#kidWeek [data-kweek="1"]')
+        k2ph.wait_for_timeout(400)
     kid_blocks = k2ph.locator("#kidWeek .kblk[data-kev]").count()
     check("23_phone_kid_week_blocks", kid_blocks >= 1, str(kid_blocks))
     k2ph.screenshot(path=str(OUT / "09-phone-kids-rrule.png"))
     k2pc.close(); k2_pc_ctx.close(); k2ph.close(); k2_ph_ctx.close()
+
+    # ------------------------------------------- 24. 시트에 이미 일정이 있어도, 기기에만 있던 신규 일정은 자동 병합
+    BACK.reset([ev("e-auto-1", "시트에 있던 일정", "2026-11-27T09:00", "2026-11-27T10:00")])
+    auto_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900}, locale="ko-KR",
+                                   timezone_id="Asia/Seoul")
+    auto_ctx.route("https://script.google.com/**", mock_route)
+    seed_extra(auto_ctx, known=["e-auto-1"])
+    auto = new_page(auto_ctx, "autodev", events=[
+        ev("e-auto-1", "시트에 있던 일정", "2026-11-27T09:00", "2026-11-27T10:00"),
+        ev("e-auto-2", "기기에만 있던 일정", "2026-11-29T09:00", "2026-11-29T10:00"),
+    ])
+    check("24_sheet_gets_local_only", wait_until(lambda: "e-auto-2" in BACK.events, timeout=15), str(list(BACK.events)))
+    check("24_sheet_kept_remote", "e-auto-1" in BACK.events, str(list(BACK.events)))
+    check("24_local_kept", "기기에만 있던 일정" in titles(auto), f"titles={titles(auto)}")
+    check("24_pending_cleared", wait_until(lambda: len(stored(auto, "pcal.pending.v1")) == 0, timeout=10),
+          str(stored(auto, "pcal.pending.v1")))
+    check("24_no_duplicate", len(titles(auto)) == 2, f"titles={titles(auto)}")
+
+    # 다른 기기에서 지운 일정(시트에서 본 적 있는 ID)은 되살리지 않습니다.
+    BACK.events.pop("e-auto-1", None)
+    auto.reload(wait_until="load")
+    auto.wait_for_timeout(1600)
+    check("24_deleted_elsewhere_not_resurrected", "e-auto-1" not in BACK.events, str(list(BACK.events)))
+    check("24_local_dropped", "시트에 있던 일정" not in titles(auto), f"titles={titles(auto)}")
+    check("24_other_kept", "기기에만 있던 일정" in titles(auto), f"titles={titles(auto)}")
+    check("24_no_resurrect_after_repull",
+          not wait_until(lambda: "e-auto-1" in BACK.events, timeout=3), str(list(BACK.events)))
+    auto.close(); auto_ctx.close()
+
+    # ------------------------------------------- 25. 육아: 시트가 비어 있어도 기기의 아이 이름·육아 일정이 자동으로 올라감
+    BACK.reset([])
+    k3_ctx = browser.new_context(service_workers="block", viewport={"width": 390, "height": 844}, is_mobile=True,
+                                 has_touch=True, locale="ko-KR", timezone_id="Asia/Seoul")
+    k3_ctx.route("https://script.google.com/**", mock_route)
+    seed_extra(k3_ctx, kid_events=[kid_event("k-local-1", "피아노 학원", TODAY2)],
+               kid_children=kid_profile(["첫째", "둘째"]))
+    k3 = new_page(k3_ctx, "kidauto")
+    check("25_kid_event_uploaded",
+          wait_until(lambda: "k-local-1" in BACK.kids_events, timeout=15), str(list(BACK.kids_events)))
+    check("25_profile_uploaded",
+          wait_until(lambda: [c["name"] for c in BACK.kids_children] == ["첫째", "둘째"], timeout=15),
+          str(BACK.kids_children))
+    check("25_kid_pending_cleared", wait_until(lambda: len(kid_pending(k3)) == 0, timeout=10), str(kid_pending(k3)))
+    check("25_phone_keeps_name", "첫째" in kid_names(k3), str(kid_names(k3)))
+    k3.close(); k3_ctx.close()
+
+    # ------------------------------------------- 26. 「이 브라우저 일정 시트로 올리기」가 육아 일정·아이 이름까지 올림
+    BACK.reset([ev("e-up-1", "시트에만 있던 일정", "2026-12-05T09:00", "2026-12-05T10:00")],
+               kids={"children": [], "events": [kid_event("k-sheet-1", "시트에만 있던 육아", "2026-12-06")]})
+    BACK.kids_fail = True                     # 자동 동기화가 먼저 올리지 못하게 해 둡니다
+    up_ctx = browser.new_context(service_workers="block", viewport={"width": 1440, "height": 900}, locale="ko-KR",
+                                 timezone_id="Asia/Seoul")
+    up_ctx.route("https://script.google.com/**", mock_route)
+    up = new_page(up_ctx, "uploader", events=[ev("e-up-local", "브라우저에만 있던 일정", "2026-12-07T09:00", "2026-12-07T10:00")])
+    kid_add(up, "올리기 테스트", TODAY2)
+    check("26_kid_not_yet_on_sheet", "올리기 테스트" not in [e.get("title") for e in BACK.kids_events.values()],
+          str(list(BACK.kids_events.values())))
+    up.click("#settingsBtn")
+    up.wait_for_timeout(300)
+    up.fill('#setKids [data-kidname="kid1"]', "첫째")
+    up.locator('#setKids [data-kidname="kid1"]').press("Tab")
+    up.wait_for_timeout(400)
+    BACK.kids_fail = False
+    up.click("#setUpload")
+    up.wait_for_timeout(300)
+    up.click("#cbOk")
+    check("26_events_replaced", wait_until(lambda: "e-up-local" in BACK.events and "e-up-1" in BACK.events, timeout=15),
+          str(list(BACK.events)))
+    check("26_kid_event_uploaded",
+          wait_until(lambda: "올리기 테스트" in [e.get("title") for e in BACK.kids_events.values()], timeout=15),
+          str(list(BACK.kids_events.values())))
+    check("26_kid_sheet_only_kept", "k-sheet-1" in BACK.kids_events, str(list(BACK.kids_events)))
+    check("26_profile_uploaded",
+          wait_until(lambda: any(c.get("name") == "첫째" for c in BACK.kids_children), timeout=15),
+          str(BACK.kids_children))
+    check("26_msg", "올렸" in up.inner_text("#setMsg"), up.inner_text("#setMsg"))
+    up.close(); up_ctx.close()
 
     # ---------------------------------------------------------------- 13. 콘솔 오류
     check("14_no_console_errors", not errors, json.dumps(errors[:5], ensure_ascii=False))

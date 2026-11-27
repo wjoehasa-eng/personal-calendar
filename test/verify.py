@@ -618,7 +618,8 @@ with sync_playwright() as p:
         only = kp.locator("#kidHome .kitem").count()
         report["kid_filter"] = [total, only]
         assert only < total, report["kid_filter"]
-        assert "수영" in kp.inner_text("#kidHome")
+        # 오늘 요일과 무관하게 늘 보이는 내일 일정(체험학습 신청서,kid2)으로 확인합니다.
+        assert "체험학습" in kp.inner_text("#kidHome")
         assert "태권도" not in kp.inner_text("#kidHome")
         kp.click('#kidsBar [data-kidfilter="all"]')
         kp.wait_for_timeout(350)

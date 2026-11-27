@@ -1188,7 +1188,7 @@ body.tab-kids .sidebar{display:none}
 
 <script>
 /* =====================================================================
-   내 캘린더 — 단일 파일 앱 (v1.3.1)
+   내 캘린더 — 단일 파일 앱 (v1.3.2)
    개인 캘린더 + 육아 홈·시간표(아이 일정·준비물·학원 시간표)를 한 앱에 담았습니다.
    아래쪽 탭으로 👶 육아 홈 · 🗓️ 시간표 · 📅 개인 캘린더를 오갑니다.
    로컬(localStorage) 또는 비공개 구글 시트(Apps Script)에 저장하고,
@@ -1649,6 +1649,28 @@ function localOnlyCount(){
   return state.events.filter(e=>!knownIds.has(String(e.id)) && !pending[e.id]).length;
 }
 
+/**
+ * 이 기기에만 있고 시트에는 한 번도 올라간 적 없는 일정을 자동으로 대기열에 넣습니다.
+ * · 시트에서 이미 본 ID(knownIds)는 다른 기기에서 지운 것일 수 있으므로 올리지 않습니다.
+ * · 삭제를 기다리는 항목(pending[id]==='delete')도 건드리지 않습니다.
+ * 그래서 「기기에만 저장해 둔 일정」만 안전하게 시트로 합쳐집니다.
+ */
+function autoQueueLocalOnly(remoteIds){
+  if(!state.url) return 0;
+  let n=0;
+  state.events.forEach(ev=>{
+    if(!ev || !ev.id) return;
+    const id=String(ev.id);
+    if(pending[id]) return;                                   // 이미 대기 중(올리기·지우기)
+    if(remoteIds && remoteIds.has(id)) return;                // 시트에 이미 있음
+    if(knownIds.has(id)) return;                              // 시트에서 사라짐 → 다른 기기에서 지운 것
+    pending[id]=JSON.parse(JSON.stringify(ev));
+    n++;
+  });
+  if(n) savePending();
+  return n;
+}
+
 /** 이 기기에서 고친 일정을 대기열에 넣고 시트로 밀어 올립니다. */
 function queueEvent(ev){
   if(!state.url || !ev || !ev.id) return;
@@ -1697,8 +1719,15 @@ function applyRemote(d){
   if(d && d.version) noteBackendVersion(d.version);
   const remote=(Array.isArray(d.events)?d.events:[]).map(evFromSheet);
   const remoteEmpty=remote.length===0;
+  const remoteIds=new Set();
+  remote.forEach(r=>{ if(r && r.id!=null && String(r.id)!=='') remoteIds.add(String(r.id)); });
   const calsChanged=applyRemoteCals(d.calendars);
   const kidsChanged=kApplyRemote(d.kids);
+
+  // 시트에 한 번도 올라간 적 없는 이 기기 전용 일정은 저절로 시트로 올립니다(PC·폰이 어긋나지 않게).
+  // 그래야 「이 브라우저 일정 시트로 올리기」를 손으로 누르지 않아도 연결만 하면 맞춰집니다.
+  const queuedLocal=autoQueueLocalOnly(remoteIds);
+  if(queuedLocal) setTimeout(()=>{ flushPending(); },0);
 
   // 시트가 비어 있을 때 이 기기의 일정을 지우지 않습니다(처음 연결했는데 아직 안 올린 경우 등).
   // 일정을 정말 전부 지운 경우는 연속 두 번 비어 있을 때만 인정합니다(저장 도중의 빈 응답 보호).
@@ -1709,8 +1738,6 @@ function applyRemote(d){
   } else if(!remoteEmpty && syncState.strikes){ syncState.strikes=0; saveSyncState(); }
   if(!remoteEmpty) syncState.seenNonEmpty=true;
 
-  const remoteIds=new Set();
-  remote.forEach(r=>{ if(r && r.id!=null && String(r.id)!=='') remoteIds.add(String(r.id)); });
   const localById=new Map(state.events.map(e=>[String(e.id),e]));
   const out=[];
 
@@ -1779,7 +1806,7 @@ function applyRemote(d){
     const id=String(ev.id);
     if(remoteIds.has(id) || pending[id]) return;
     if(knownIds.has(id)) return;                                  // 시트에서 사라짐 → 다른 기기에서 지운 것
-    out.push(ev);                                                 // 이 기기에만 있는 일정 → 지우지 않습니다
+    out.push(ev);                                                 // 이 기기에만 있는 일정 → 지우지 않고(위에서 대기열에도 넣었습니다) 화면에 남깁니다
   });
 
   knownIds=new Set(remoteIds); saveSyncState();
@@ -1818,7 +1845,7 @@ function refreshFromRemote(opts){
     if(!d || d.ok===false) throw new Error((d&&d.error)||'일정을 읽지 못했습니다.');
     const res=applyRemote(d);
     syncState.lastPull=Date.now(); saveSyncState();
-    setSync('on'); setSyncInfo(res.reason==='empty-sheet'?'시트가 비어 있어요 — 설정에서 "이 브라우저 일정 시트로 올리기"를 눌러 주세요.':'');
+    setSync('on'); setSyncInfo(res.reason==='empty-sheet'?'시트가 아직 비어 있어요 — 기기에 있던 일정은 자동으로 올리고, 새 일정도 저절로 시트에 저장됩니다.':'');
     if(res.changed && !opts.quiet) toast('시트에서 최신 일정을 불러왔어요');
     return res;
   }).catch(err=>{
@@ -3182,7 +3209,7 @@ function setMsg(s){ const m=$('#setMsg'); if(m) m.textContent=s||''; }
 function openSettings(){
   $('#setUrl').value=state.url; setStatus(state.url?'연결됨':'로컬');
   $('#setWeekStart').value=String(PREFS.weekStart);
-  $('#setVersion').textContent='내 캘린더 v1.3.1 · 일정 '+state.events.length+'개 · 캘린더 '+state.cals.length+'개 · 육아 일정 '+kidData.events.length+'개';
+  $('#setVersion').textContent='내 캘린더 v1.3.2 · 일정 '+state.events.length+'개 · 캘린더 '+state.cals.length+'개 · 육아 일정 '+kidData.events.length+'개';
   renderKidsSettings();
   setMsg(''); setSyncInfo();
   show($('#settings'));
@@ -3203,7 +3230,7 @@ function connectSheet(raw){
     return kFlushProfile().then(kFlush).then(()=>refreshFromRemote({force:true})).then(res=>{
       if(res && res.error) throw new Error(res.error);
       persistLocal(); setSync('on'); setStatus('연결됨'); startAutoSync();
-      if(res && res.reason==='empty-sheet') setMsg('시트가 비어 있어요. 아래 "이 브라우저 일정 시트로 올리기"로 지금 일정을 올릴 수 있어요.');
+      if(res && res.reason==='empty-sheet') setMsg('연결됐습니다. 시트가 아직 비어 있어요 — 기기에 있던 일정은 자동으로 올리고, 앞으로 만드는 일정도 저절로 시트에 저장됩니다.');
       else setMsg('연결됐습니다 · 백엔드 '+(p.version||'?')+' · 일정 '+state.events.length+'개');
       setSyncInfo();
       toast('비공개 시트에 연결했어요');
@@ -3520,6 +3547,25 @@ function kQueueProfile(){
   kidSync.profilePending={children:JSON.parse(JSON.stringify(kidData.children)),at:new Date().toISOString()};
   kSaveSync(); kFlushProfile();
 }
+/**
+ * 이 기기에만 있고 시트에는 한 번도 올라간 적 없는 육아 일정을 자동으로 대기열에 넣습니다.
+ * · 시트에서 이미 본 ID(kidSync.known)는 다른 기기에서 지운 것일 수 있으므로 올리지 않습니다.
+ */
+function kAutoQueueLocalOnly(remoteIds){
+  if(!state.url || kidSync.unsupported || kidSync.noKidsTab) return 0;
+  let n=0;
+  kidData.events.forEach(function(ev){
+    if(!ev || !ev.id) return;
+    const id=String(ev.id);
+    if(kidPending[id]) return;
+    if(remoteIds && remoteIds.has(id)) return;
+    if(kidSync.known.indexOf(id)>=0) return;
+    kidPending[id]=JSON.parse(JSON.stringify(ev));
+    n++;
+  });
+  if(n) kSavePending();
+  return n;
+}
 async function kFlushProfile(){
   if(!state.url||!kidSync.profilePending||kProfileFlushing||kidSync.unsupported) return false;
   kProfileFlushing=true;
@@ -3575,12 +3621,20 @@ function kApplyRemote(kids){
   kidSync.noKidsTab=false;
   let changed=kApplyProfile(kids.children);
   if(!Array.isArray(kids.children)||!kids.children.length){
-    /* 시트에 아직 아이 프로필이 없습니다 → 이 기기 이름으로 시작합니다. */
+    /* 시트에 아직 아이 프로필이 없습니다 → 이 기기 이름으로 시작합니다.
+       기본값 '아이 1'·'아이 2' 든 사용자가 바꿔 넣은 이름이든, 시트가 비어 있으면 이 기기 값으로 시트를 채웁니다. */
     if(!kidSync.profilePending) kQueueProfile();
+    else kFlushProfile();                                     // 못 올리고 남아 있던 프로필은 지금 다시 올립니다
   }
   if(!Array.isArray(kids.events)){ kidSync.unsupported=true; kSaveSync(); return changed; }
   const ids=kidData.children.map(function(c){ return c.id; });
   const remote=kids.events.map(function(e){ return kNormEvent(e,ids); }).filter(Boolean);
+
+  const rIds=new Set(remote.map(function(e){ return String(e.id); }));
+
+  // 시트에 한 번도 올라간 적 없는 이 기기 전용 육아 일정은 저절로 시트로 올립니다.
+  const queuedK=kAutoQueueLocalOnly(rIds);
+  if(queuedK) setTimeout(function(){ kFlush(); },0);
 
   if(!remote.length&&kidData.events.length&&!Object.keys(kidPending).length){
     const knownNow=new Set(kidSync.known.map(String));
@@ -3601,7 +3655,6 @@ function kApplyRemote(kids){
   } else if(remote.length&&kidSync.strikes){ kidSync.strikes=0; kSaveSync(); }
   if(remote.length) kidSync.seen=true;
 
-  const rIds=new Set(remote.map(function(e){ return String(e.id); }));
   const localById=new Map(kidData.events.map(function(e){ return [String(e.id),e]; }));
   const known=new Set(kidSync.known.map(String));
   const out=[];
@@ -4422,7 +4475,8 @@ function bind(){
   });
   $('#setUpload').addEventListener('click',()=>{
     if(!state.url){ setMsg('먼저 시트를 연결해 주세요.'); return; }
-    confirmDialog({title:'시트로 올리기',body:`이 브라우저의 일정 ${state.events.length}개로 시트를 통째로 바꿉니다.\n시트에만 있는 일정은 사라집니다.\n\n보통은 그냥 두셔도 자동으로 맞춰집니다.`,okText:'올리기'}).then(ok=>{
+    const kidBit=kidData.events.length?`\n이 브라우저의 육아 일정 ${kidData.events.length}개와 아이 이름도 함께 올립니다(시트에만 있는 육아 일정은 그대로 둡니다).`:'';
+    confirmDialog({title:'시트로 올리기',body:`이 브라우저의 일정 ${state.events.length}개로 시트를 통째로 바꿉니다.\n시트에만 있는 일정은 사라집니다.${kidBit}\n\n보통은 그냥 두셔도 자동으로 맞춰집니다.`,okText:'올리기'}).then(ok=>{
       if(!ok) return;
       setMsg('올리는 중…'); setSync('busy');
       api('saveAll',{events:eventsForSheet(state.events),calendars:state.cals,clear:true}).then(r=>{
@@ -4432,7 +4486,19 @@ function bind(){
         calsMeta.pending=null; calsMeta.known=state.cals.map(c=>String(c.id)); calsMeta.error=''; saveCalsMeta();
         syncState.seenNonEmpty=state.events.length>0; syncState.strikes=0; syncState.lastPull=Date.now(); saveSyncState();
         setSync('on'); setSyncInfo();
-        setMsg('이 브라우저 일정 '+state.events.length+'개를 시트에 올렸습니다.'); toast('시트에 올렸어요');
+        const doneMsg='이 브라우저 일정 '+state.events.length+'개'+(kidData.events.length?' · 육아 일정 '+kidData.events.length+'개':'')+'를 시트에 올렸습니다.';
+        setMsg(doneMsg); toast('시트에 올렸어요');
+        /* 육아 일정·아이 이름도 함께 올립니다. */
+        kidPending={};
+        kidData.events.forEach(ev=>{ kidPending[ev.id]=JSON.parse(JSON.stringify(ev)); });
+        kSavePending();
+        kidSync.profilePending=null; kSaveSync(); kQueueProfile();
+        return kFlushProfile().then(()=>kFlush()).then(okKids=>{
+          setSyncInfo();
+          if(!okKids && !kidSync.unsupported && !kidSync.noKidsTab){
+            setMsg(doneMsg+'\n육아 일정은 아직 다 올리지 못했어요 — 잠시 뒤 자동으로 다시 시도합니다.');
+          }
+        });
       }).catch(err=>{ setSync('error'); setMsg(err.message||'올리지 못했어요'); });
     });
   });

@@ -4007,14 +4007,26 @@ function renderKidWeek(){
   h+='</div>';
 
   const allDayOcc=occ.filter(function(o){ return o.ev.allDay||!o.ev.start; });
-  if(allDayOcc.length){
-    h+='<div class="kwg kwallday"><div class="klbl">종일</div>';
+  const calOcc=occList(parseYMD(ws),parseYMD(we));
+  if(allDayOcc.length||calOcc.length){
+    h+='<div class="kwg kwallday"><div class="klbl">일정</div>';
     for(let a=0;a<7;a++){
       const da=kAdd(ws,a);
-      const list=allDayOcc.filter(function(o){ return o.date===da||(o.date<=da&&o.endDate>=da); });
-      h+='<div class="kacell">'+list.slice(0,3).map(function(o){
-        return '<button class="kachip" style="background:'+kColorOf(o.ev)+'" data-kev="'+esc(o.ev.id)+'" data-kdate="'+o.date+'">'+esc(o.ev.title)+'</button>';
-      }).join('')+(list.length>3?'<span class="kbadge">+'+(list.length-3)+'</span>':'')+'</div>';
+      const klist=allDayOcc.filter(function(o){ return o.date===da||(o.date<=da&&o.endDate>=da); });
+      const plist=calOcc.filter(function(o){
+        const s=YMD(startOfDay(o.start)), e=YMD(startOfDay(o.end));
+        return s<=da&&e>=da;
+      });
+      const chips=[];
+      plist.forEach(function(o){
+        const t=(!o.allDay&&o.start)?fmtTime(o.start)+' ':'';
+        const c=evColor(o.ev,o.cal);
+        chips.push('<button class="kachip" style="background:'+c+'" data-pkev="'+esc(o.ev.id)+'" data-pkdate="'+da+'">'+esc(t+(o.ev.title||'(제목 없음)'))+'</button>');
+      });
+      klist.forEach(function(o){
+        chips.push('<button class="kachip" style="background:'+kColorOf(o.ev)+'" data-kev="'+esc(o.ev.id)+'" data-kdate="'+o.date+'">'+esc(o.ev.title)+'</button>');
+      });
+      h+='<div class="kacell">'+chips.slice(0,5).join('')+(chips.length>5?'<span class="kbadge">+'+(chips.length-5)+'</span>':'')+'</div>';
     }
     h+='</div>';
   }
@@ -4412,6 +4424,8 @@ function bindKids(){
     if(add){ openKidModal(null,add.dataset.kadd); return; }
     const kev=e.target.closest('[data-kev]');
     if(kev){ openKidModal(kev.dataset.kev,kev.dataset.kdate||null); return; }
+    const pkev=e.target.closest('[data-pkev]');
+    if(pkev){ const ev=state.events.find(function(x){ return x.id===pkev.dataset.pkev; }); if(ev) openModal({ev:ev,occDate:pkev.dataset.pkdate||null}); return; }
     const sup=e.target.closest('[data-ksup]');
     if(sup){ kToggleSup(sup.dataset.ksup,sup.dataset.ksdate,sup.dataset.ksid); return; }
     const wk=e.target.closest('[data-kweek]');

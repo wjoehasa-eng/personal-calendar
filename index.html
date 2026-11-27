@@ -5322,6 +5322,8 @@ function fbApplyDoc(col,id,type,data){
     if(type==='removed'){ FB.known.profile=null; return false; }
     const doc=fbKidsProfileFromDoc(data);
     FB.known.profile=doc;
+    const localStamp=fbKidsProfileDoc().updatedAt;
+    if(localStamp && (!doc.updatedAt || doc.updatedAt < localStamp)) return false;
     let changed=false;
     if(doc.appTitle && doc.appTitle!==PREFS.appTitle){ PREFS.appTitle=doc.appTitle; changed=true; }
     if(fbSig(doc.children)!==fbSig(kidData.children)){ kidData.children=doc.children; changed=true; }
@@ -5441,6 +5443,7 @@ function fbMirrorProfile(){
   const prev=FB.known.profile;
   if(prev && fbSig(prev)===fbSig(doc)) return;
   if(!prev && !FB.seeded) return;
+  if(prev && prev.updatedAt && (!doc.updatedAt || doc.updatedAt < prev.updatedAt)) return;
   fbWrite('profile','main',doc);
 }
 function fbWrite(col,id,data){

@@ -4214,9 +4214,10 @@ function renderKidWeek(){
       });
       const chips=[];
       plist.forEach(function(o){
+        OCC.set(o.key,o);
         const t=(!o.allDay&&o.start)?fmtTime(o.start)+' ':'';
         const c=evColor(o.ev,o.cal);
-        chips.push('<button class="kachip" style="background:'+c+'" data-pkev="'+esc(o.ev.id)+'" data-pkdate="'+da+'">'+esc(t+(o.ev.title||'(제목 없음)'))+'</button>');
+        chips.push('<button class="kachip" style="background:'+c+'" data-pkey="'+esc(o.key)+'" data-pkev="'+esc(o.ev.id)+'" data-pkdate="'+da+'">'+esc(t+(o.ev.title||'(제목 없음)'))+'</button>');
       });
       klist.forEach(function(o){
         chips.push('<button class="kachip" style="background:'+kColorOf(o.ev)+'" data-kev="'+esc(o.ev.id)+'" data-kdate="'+o.date+'">'+esc(o.ev.title)+'</button>');
@@ -4624,7 +4625,7 @@ function bindKids(){
     }
     const pkev=e.target.closest('[data-pkev]');
     if(pkev){
-      const key=pkev.dataset.pkev+'@'+(pkev.dataset.pkdate||'');
+      const key=pkev.dataset.pkey||(pkev.dataset.pkev+'@'+(pkev.dataset.pkdate||''));
       if(OCC.has(key)){ openPop(key,e.clientX,e.clientY); return; }
       const ev=state.events.find(function(x){ return x.id===pkev.dataset.pkev; });
       if(ev) openModal({event:ev,occDate:pkev.dataset.pkdate||null});
